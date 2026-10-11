@@ -46,6 +46,7 @@ data class Channel(
         get() = event?.let { info -> listOfNotNull(info.competition, info.feed).joinToString(" · ").ifBlank { null } } ?: categoryLabel.title
     val countryTag: String? get() = label.country ?: categoryLabel.country
     val badges: List<String> get() = label.badges
+    val quality: ChannelText.VideoQuality? by lazy { ChannelText.quality(label.badges, categoryLabel.badges) }
     val initials: String get() = ChannelText.initials(label.title)
 
     val nameKey: String by lazy { ChannelText.normalize(label.title) }

@@ -66,7 +66,7 @@ private data class LaneStyle(val lane: BrowseLane, val emoji: String, val subtit
 private val laneStyles = listOf(
     LaneStyle(BrowseLane.FRANCE, "🇫🇷", "Chaînes françaises", listOf(Color(0xFF27448F), Color(0xFF162550))),
     LaneStyle(BrowseLane.PORTUGUESE, "🇵🇹", "Portugal et Brésil", listOf(Color(0xFF1C6B45), Color(0xFF0F3527))),
-    LaneStyle(BrowseLane.SPORTS, "⚽", "Chaînes sport", listOf(Color(0xFF8A4A16), Color(0xFF45240D))),
+    LaneStyle(BrowseLane.SPORTS, "⚽", "France et Portugal", listOf(Color(0xFF8A4A16), Color(0xFF45240D))),
     LaneStyle(BrowseLane.EVENTS, "🏟️", "Matchs et directs", listOf(Color(0xFF6A2A6E), Color(0xFF2E1533)))
 )
 
@@ -235,7 +235,7 @@ private fun countLabel(count: Int, noun: String): String = when (count) {
 private fun HomeRow(
     title: String?,
     subtitle: String? = null,
-    topPadding: androidx.compose.ui.unit.Dp = 18.dp,
+    topPadding: androidx.compose.ui.unit.Dp = 10.dp,
     content: @Composable () -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(top = topPadding)) {
@@ -251,7 +251,7 @@ private fun HomeRow(
         // Vertical padding leaves room for the focused card to grow without being clipped.
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                .padding(horizontal = Spacing.Side, vertical = 14.dp),
+                .padding(horizontal = Spacing.Side, vertical = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)
         ) { content() }
     }
@@ -259,20 +259,21 @@ private fun HomeRow(
 
 @Composable
 private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClick: () -> Unit) {
-    CardSurface(onClick = onClick, modifier = modifier.size(width = 196.dp, height = 150.dp), container = style.colors.last()) {
+    CardSurface(onClick = onClick, modifier = modifier.size(width = 196.dp, height = 112.dp), container = style.colors.last()) {
         Box(Modifier.fillMaxSize().background(Brush.linearGradient(style.colors))) {
             Text(
-                style.emoji, fontSize = 92.sp,
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 18.dp, y = 22.dp).rotate(-12f).alpha(0.28f)
+                style.emoji, fontSize = 72.sp,
+                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 18.dp).rotate(-12f).alpha(0.28f)
             )
-            Column(Modifier.padding(20.dp).align(Alignment.TopStart)) {
-                Text(style.emoji, fontSize = 26.sp)
-                Spacer(Modifier.height(6.dp))
-                Text(style.lane.label, style = Type.Headline, color = Color.White)
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).align(Alignment.TopStart)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(style.emoji, fontSize = 20.sp)
+                    Text(style.lane.label, style = Type.Headline, color = Color.White, maxLines = 1)
+                }
                 Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f), maxLines = 1)
             }
             Row(
-                Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 16.dp),
+                Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -285,14 +286,14 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
 
 @Composable
 private fun ShortcutCard(icon: ImageVector, tint: Color, title: String, subtitle: String, modifier: Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.size(width = 196.dp, height = 76.dp), outline = Palette.Outline) {
+    FocusSurface(onClick = onClick, modifier = modifier.size(width = 196.dp, height = 60.dp), outline = Palette.Outline) {
         Row(
             Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Box(Modifier.size(40.dp).background(tint.copy(alpha = 0.16f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+            Box(Modifier.size(34.dp).background(tint.copy(alpha = 0.16f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
             }
             Column {
                 Text(title, style = Type.TitleSmall, maxLines = 1)
@@ -304,10 +305,10 @@ private fun ShortcutCard(icon: ImageVector, tint: Color, title: String, subtitle
 
 @Composable
 fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.size(width = 196.dp, height = 156.dp)) {
+    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.size(width = 160.dp, height = 122.dp)) {
         Column(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth().height(96.dp)) {
-                ChannelLogo(channel, Modifier.fillMaxSize(), corner = 0.dp, initialsSize = 26)
+            Box(Modifier.fillMaxWidth().height(70.dp)) {
+                ChannelLogo(channel, Modifier.fillMaxSize(), corner = 0.dp, initialsSize = 22)
                 if (isFavorite) {
                     Icon(
                         Icons.Rounded.Star, contentDescription = "Favori", tint = Palette.Gold,
@@ -315,7 +316,7 @@ fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, onLon
                     )
                 }
             }
-            Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 7.dp)) {
                 Text(channel.displayName, style = Type.Label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     channel.badges.firstOrNull()?.let { Badge(it, tone = Palette.Muted) }
@@ -328,8 +329,8 @@ fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, onLon
 
 @Composable
 private fun CategoryCard(category: ChannelCategory, count: String, modifier: Modifier, onLongClick: () -> Unit, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.size(width = 268.dp, height = 96.dp), outline = Palette.Outline) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 14.dp), verticalArrangement = Arrangement.SpaceBetween) {
+    FocusSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.size(width = 212.dp, height = 72.dp), outline = Palette.Outline) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(category.displayName, style = Type.TitleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 category.countryTag?.let { Badge(it) }
@@ -341,7 +342,7 @@ private fun CategoryCard(category: ChannelCategory, count: String, modifier: Mod
 
 @Composable
 private fun AddCategoryCard(modifier: Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.size(width = 268.dp, height = 96.dp), container = Palette.Ink, outline = Palette.Outline) {
+    FocusSurface(onClick = onClick, modifier = modifier.size(width = 212.dp, height = 72.dp), container = Palette.Ink, outline = Palette.Outline) {
         Row(
             Modifier.fillMaxSize().padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -358,7 +359,7 @@ private fun AddCategoryCard(modifier: Modifier, onClick: () -> Unit) {
 
 @Composable
 private fun SeeAllCard(modifier: Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.size(width = 156.dp, height = 156.dp), container = Palette.Ink, outline = Palette.Outline) {
+    FocusSurface(onClick = onClick, modifier = modifier.size(width = 122.dp, height = 122.dp), container = Palette.Ink, outline = Palette.Outline) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(30.dp))
             Spacer(Modifier.height(8.dp))
@@ -370,7 +371,7 @@ private fun SeeAllCard(modifier: Modifier, onClick: () -> Unit) {
 @Composable
 private fun HintCard(icon: ImageVector, title: String, message: String) {
     Row(
-        Modifier.width(520.dp).height(96.dp)
+        Modifier.width(520.dp).height(72.dp)
             .border(1.dp, Palette.Outline, RoundedCornerShape(14.dp))
             .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,

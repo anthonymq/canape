@@ -192,14 +192,14 @@ fun TvButton(
     FocusSurface(
         onClick = onClick,
         interactionSource = interaction,
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier.heightIn(min = 42.dp),
         shape = CircleShape,
         container = if (primary) Palette.AccentDeep else Palette.Surface2,
         outline = if (primary) Palette.Accent.copy(alpha = 0.6f) else Palette.Outline,
         enabled = enabled
     ) {
         Row(
-            Modifier.align(Alignment.Center).padding(horizontal = 24.dp, vertical = 12.dp),
+            Modifier.align(Alignment.Center).padding(horizontal = 20.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -210,10 +210,10 @@ fun TvButton(
 }
 
 @Composable
-fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     FocusSurface(
         onClick = onClick,
-        modifier = modifier.height(44.dp),
+        modifier = modifier.height(if (compact) 32.dp else 38.dp),
         shape = CircleShape,
         container = if (selected) Palette.AccentDeep else Color.Transparent,
         content = if (selected) Palette.OnSurface else Palette.Muted,
@@ -221,12 +221,12 @@ fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modif
         focusedScale = 1.06f
     ) {
         Row(
-            Modifier.align(Alignment.Center).padding(horizontal = 18.dp),
+            Modifier.align(Alignment.Center).padding(horizontal = if (compact) 12.dp else 15.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
-            if (selected) Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-            Text(text, style = Type.Label)
+            if (selected) Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(if (compact) 14.dp else 16.dp))
+            Text(text, style = if (compact) Type.Caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else Type.Label)
         }
     }
 }
@@ -319,7 +319,7 @@ fun TvTextField(
     val shape = RoundedCornerShape(14.dp)
     Surface(
         onClick = { onEditingChange(true) },
-        modifier = modifier.focusRequester(outerFocusRequester).heightIn(min = 56.dp),
+        modifier = modifier.focusRequester(outerFocusRequester).heightIn(min = 48.dp),
         interactionSource = interaction,
         shape = ClickableSurfaceDefaults.shape(shape = shape),
         colors = ClickableSurfaceDefaults.colors(
@@ -336,11 +336,11 @@ fun TvTextField(
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f)
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (icon != null) Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp), tint = if (editing) Palette.Accent else LocalContentColor.current)
+            if (icon != null) Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp), tint = if (editing) Palette.Accent else LocalContentColor.current)
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (value.isEmpty()) Text(placeholder, style = Type.Body, color = secondaryColor(), maxLines = 1)
                 BasicTextField(

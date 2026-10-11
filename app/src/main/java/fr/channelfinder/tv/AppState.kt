@@ -65,6 +65,17 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     val unavailable = mutableStateMapOf<String, Long>()
 
     var selectedChannelId by mutableStateOf<String?>(null)
+
+    /** Video quality filter for channel lists; null shows every quality. Remembered between sessions. */
+    var qualityFilter by mutableStateOf(
+        prefs.getString("quality_filter", null)?.let { name -> ChannelText.VideoQuality.entries.firstOrNull { it.name == name } }
+    )
+        private set
+
+    fun setQuality(quality: ChannelText.VideoQuality?) {
+        qualityFilter = quality
+        prefs.edit().putString("quality_filter", quality?.name).apply()
+    }
     var browserListState by mutableStateOf(LazyListState())
         private set
     var categoryListState by mutableStateOf(LazyListState())
@@ -300,7 +311,8 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         return live to soon
     }
 
-    fun search(base: List<Channel>, query: String): List<Channel> {
+    fun search(all: List<Channel>, query: String, quality: ChannelText.VideoQuality? = null): List<Channel> {
+        val base = if (quality == null) all else all.filter { it.quality == quality }
         val tokens = ChannelText.tokens(query)
         if (tokens.isEmpty()) return base
         return base.mapNotNull { channel -> ChannelText.score(channel, tokens)?.let { channel to it } }

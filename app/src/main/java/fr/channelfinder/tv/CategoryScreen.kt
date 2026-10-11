@@ -126,14 +126,14 @@ fun CategoryPickerScreen(state: AppState, page: Page.CategoryPicker) {
             LazyColumn(
                 state = state.categoryListState,
                 modifier = Modifier.fillMaxWidth().weight(1f).focusRestorer(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 contentPadding = PaddingValues(vertical = 6.dp, horizontal = 10.dp)
             ) {
                 items(items, key = { it.key }) { item ->
                     when (item) {
                         is CategoryItem.Header -> Text(
                             item.title.uppercase(), style = Type.Eyebrow, color = Palette.Accent,
-                            modifier = Modifier.padding(top = 14.dp, bottom = 2.dp, start = 4.dp)
+                            modifier = Modifier.padding(top = 10.dp, bottom = 0.dp, start = 4.dp)
                         )
                         is CategoryItem.Row -> CategoryRow(
                             category = item.category,
@@ -167,7 +167,7 @@ private fun CategoryRow(
         FocusSurface(
             onClick = onOpen,
             onLongClick = onTogglePin,
-            modifier = modifier.weight(1f).height(64.dp).onFocusChanged { if (it.isFocused) onFocus() },
+            modifier = modifier.weight(1f).height(50.dp).onFocusChanged { if (it.isFocused) onFocus() },
             focusedScale = 1.02f
         ) {
             Row(
@@ -176,7 +176,7 @@ private fun CategoryRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 category.countryTag?.let { Badge(it) }
-                Text(category.displayName, style = Type.TitleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                Text(category.displayName, style = Type.Label, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text("$count chaînes", style = Type.Caption, color = secondaryColor())
             }
         }
@@ -191,7 +191,7 @@ private fun PinButton(pinned: Boolean, onClick: () -> Unit) {
     FocusSurface(
         onClick = onClick,
         interactionSource = interaction,
-        modifier = Modifier.width(168.dp).height(52.dp),
+        modifier = Modifier.width(150.dp).height(42.dp),
         shape = CircleShape,
         container = if (pinned) Palette.AccentDeep else Palette.Ink,
         outline = if (pinned) Palette.Accent else Palette.Outline,

@@ -71,6 +71,8 @@ The supplied playlist snapshot identified `731` as `PT ‖ DESPORTO PORTUGAL` an
 
 The browser uses two panes: a focusable channel list on the left and a 16:9 live preview with channel details and actions on the right. Moving focus to a channel updates the preview selection. The preview starts muted after 650 ms without a focus change, which avoids opening a new stream for every quick D-pad movement. The viewer can choose **Regarder** or press OK on a channel row to open full-screen playback. Favorites are toggled with a long press on OK (any channel row or card) or the preview's favorite button; rows have no second focus target. Right from the list always lands on **Regarder**; Up from the list lands on the selected lane chip; Left/Down return to the last focused row. Rows show the provider logo (Coil, bounded to 256 px, initials fallback), a cleaned name, country and quality badges, and a star for favorites. The previewed row stays highlighted while focus is in the preview pane.
 
+A **Qualité** row under the lane chips filters the list by video quality (Toutes, 4K, Full HD, HD, SD), read from the channel name's quality tag or, failing that, the category's ("FRANCE • UHD/4K", "FRANCE • SD"). Channels without a quality tag only appear under Toutes. The choice is remembered between sessions and applies to every lane; an empty result offers **Toutes les qualités**.
+
 Search ranks matches (exact name, then name prefix, then word prefix, then anywhere), ignores accents, and requires every typed word to match. Channel names are cleaned for display only (`ChannelText.kt`): country prefixes such as `|FR|` become a badge and quality suffixes (HD, FHD, 4K, HEVC…) become badges. Raw names are still searched.
 
 When returning from full-screen playback, restore the selected channel and list position. While the stream buffers, show a clear progress message. If preview playback fails, explain that the viewer can still try full-screen playback. An empty search result should remove the preview and provide a clear empty state. The D-pad must be able to move from the search field into the results.
@@ -86,7 +88,7 @@ Media3/ExoPlayer plays the selected live stream with sound; there is no seek bar
 | FR-1 | Load live categories and live streams through the Xtream player API. | Verified on emulator: 24,057 channels load. |
 | FR-2 | Keep channel ID, category ID, category label, logo URL, EPG ID, and derived lane with each channel. | Implemented. |
 | FR-3 | Search channel names, category labels, and lane labels locally. | Verified: "TF1" returns 36 ranked results, exact match first; D-pad leaves the field. |
-| FR-4 | Classify French, Portuguese, and sports channels into direct Home lanes. | Category country code wins over name words (2026-10-11): France 1,870, Português 769 (now includes `BR |` groups), Sports 2,997, Événements 423 after de-duplication. |
+| FR-4 | Classify French, Portuguese, and sports channels into direct Home lanes. | Category country code wins over name words (2026-10-11): France 1,870, Português 769 (now includes `BR |` groups), Sports 391 (French/Portuguese only since 2026-10-11), Événements 423 after de-duplication. |
 | FR-5 | Pin/unpin categories and open them directly from Home. | Verified on emulator: pin from picker, card appears on Home. |
 | FR-6 | Pin/unpin channels and retain a recent-channel list. | Verified on emulator: long-press favorite, Home row, recents ordered by recency. |
 | FR-7 | Preview the selected live channel while browsing, muted by default and delayed until focus settles. | Verified on emulator: plays muted; failure state shown. |
@@ -133,7 +135,7 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 
 ## Known issues
 
-- **Lane classification:** the category's country code now decides the lane when present; name keywords are only used for untagged categories. The Sports lane still mixes every country (2,997 channels).
+- **Lane classification:** the category's country code now decides the lane when present; name keywords are only used for untagged categories. Sports keeps only FR/PT/BR-tagged groups (391 channels); other countries' sports (including `BE ‖ BELGIQUE • SPORTS`) stay reachable from their category and search.
 - **Provider-side dead channels:** many France/Português channels answer HTTP 407 (see [Unavailable channels](#unavailable-channels)). The app learns them as the viewer meets them; there is no background scan, to avoid extra provider connections on a one-connection account.
 - **Event times:** kickoff times in feed names are read in the TV's time zone; the provider's zone is not documented. Events are considered live for 3 hours after kickoff.
 - **Catalog cache read time:** reading ~24k channels from the binary cache takes about 3 s on the emulator with a debug build. Measure on the target TV with a release build before optimizing further.

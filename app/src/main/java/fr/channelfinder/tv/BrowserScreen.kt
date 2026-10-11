@@ -80,7 +80,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val category = page.categoryId?.let(state.categoriesById::get)
     // Favorites/recents are captured when the list opens so un-starring a row does not yank focus away.
     val base = remember(state.channels, page.lane, page.categoryId) { state.channelsFor(page.lane, page.categoryId) }
-    val results = remember(base, page.query) { state.search(base, page.query) }
+    val results = remember(base, page.query, state.qualityFilter) { state.search(base, page.query, state.qualityFilter) }
     val selected = results.firstOrNull { it.id == state.selectedChannelId } ?: results.firstOrNull()
     val listState = state.browserListState
 
@@ -88,6 +88,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val selectedRowFocus = remember { FocusRequester() }
     val watchFocus = remember { FocusRequester() }
     val chipFocus = remember { browseLanes.associateWith { FocusRequester() } }
+    val qualityFocus = remember { (listOf<ChannelText.VideoQuality?>(null) + ChannelText.VideoQuality.entries).associateWith { FocusRequester() } }
     var editing by remember { mutableStateOf(page.startSearch) }
     var listHasFocus by remember { mutableStateOf(false) }
 
@@ -107,9 +108,9 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     }
 
     // A new query or lane starts again from the best match.
-    var lastFilter by remember { mutableStateOf(Triple(page.lane, page.categoryId, page.query)) }
-    LaunchedEffect(page.lane, page.categoryId, page.query) {
-        val filter = Triple(page.lane, page.categoryId, page.query)
+    var lastFilter by remember { mutableStateOf(listOf(page.lane, page.categoryId, page.query, state.qualityFilter)) }
+    LaunchedEffect(page.lane, page.categoryId, page.query, state.qualityFilter) {
+        val filter = listOf(page.lane, page.categoryId, page.query, state.qualityFilter)
         if (filter != lastFilter) {
             lastFilter = filter
             state.selectedChannelId = null
@@ -127,6 +128,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val eyebrow = when {
         category != null -> listOfNotNull("Catégorie", category.countryTag).joinToString(" · ")
         page.query.isNotBlank() -> "${number.format(results.size)} résultats pour « ${page.query.trim()} »"
+        state.qualityFilter != null -> "${number.format(results.size)} chaînes en ${state.qualityFilter!!.label}"
         else -> "${number.format(results.size)} chaînes"
     }
 
@@ -142,15 +144,15 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                 imeAction = androidx.compose.ui.text.input.ImeAction.Search,
                 onImeAction = { if (results.isNotEmpty()) runCatching { selectedRowFocus.requestFocus() } },
                 outerFocusRequester = searchFocus,
-                modifier = Modifier.width(380.dp)
+                modifier = Modifier.width(360.dp)
             )
         }
         if (page.categoryId == null) {
             Row(
-                Modifier.padding(top = 12.dp)
+                Modifier.padding(top = 10.dp)
                     .focusProperties { onEnter = { runCatching { chipFocus.getValue(page.lane).requestFocus() } } }
                     .focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 browseLanes.forEach { lane ->
                     TvChip(
@@ -162,7 +164,26 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
+        // Quality filter: its own row so the lane chips stay on one line.
+        Row(
+            Modifier.padding(top = 8.dp)
+                .focusProperties { onEnter = { runCatching { qualityFocus.getValue(state.qualityFilter).requestFocus() } } }
+                .focusGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("QUALITÉ", style = Type.Eyebrow, color = Palette.Faint, modifier = Modifier.padding(end = 4.dp))
+            qualityFocus.forEach { (quality, requester) ->
+                TvChip(
+                    text = quality?.label ?: "Toutes",
+                    selected = state.qualityFilter == quality,
+                    onClick = { state.setQuality(quality) },
+                    modifier = Modifier.focusRequester(requester),
+                    compact = true
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
 
         if (results.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -175,7 +196,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                     modifier = Modifier.weight(1.12f).fillMaxHeight()
                         .onFocusChanged { listHasFocus = it.hasFocus }
                         .focusRestorer(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(vertical = 6.dp, horizontal = 10.dp)
                 ) {
                     itemsIndexed(results, key = { _, channel -> channel.id }) { _, channel ->
@@ -213,6 +234,13 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
 @Composable
 private fun BrowseEmptyState(page: Page.Browse, state: AppState) {
     when {
+        state.qualityFilter != null && state.search(state.channelsFor(page.lane, page.categoryId), page.query).isNotEmpty() -> EmptyState(
+            Icons.Rounded.SearchOff,
+            "Aucune chaîne en ${state.qualityFilter!!.label} ici",
+            "Cette sélection existe dans d’autres qualités."
+        ) {
+            TvButton("Toutes les qualités", { state.setQuality(null) }, icon = Icons.Rounded.Clear, primary = true)
+        }
         page.query.isNotBlank() -> EmptyState(
             Icons.Rounded.SearchOff,
             "Aucun résultat pour « ${page.query.trim()} »",
@@ -258,7 +286,7 @@ private fun ChannelRow(
         onClick = onPlay,
         onLongClick = onToggleFavorite,
         interactionSource = interaction,
-        modifier = modifier.fillMaxWidth().height(68.dp).onFocusChanged { if (it.isFocused) onFocus() },
+        modifier = modifier.fillMaxWidth().height(56.dp).onFocusChanged { if (it.isFocused) onFocus() },
         container = if (isPreviewing) Palette.AccentDeep else Palette.Surface1,
         outline = if (isPreviewing) Palette.Accent else null,
         focusedScale = 1.03f
@@ -269,10 +297,10 @@ private fun ChannelRow(
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Recently failed channels stay listed but recede, so working ones stand out.
-            ChannelLogo(channel, Modifier.size(width = 72.dp, height = 46.dp).alpha(if (isUnavailable && !focused) 0.45f else 1f), corner = 8.dp)
+            ChannelLogo(channel, Modifier.size(width = 58.dp, height = 38.dp).alpha(if (isUnavailable && !focused) 0.45f else 1f), corner = 7.dp, initialsSize = 13)
             Column(Modifier.weight(1f).alpha(if (isUnavailable && !focused) 0.6f else 1f)) {
-                Text(channel.displayName, style = Type.TitleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(channel.displayName, style = Type.Label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     if (isUnavailable) UnavailableTag()
                     EventTag(channel)
                     if (channel.event == null) channel.countryTag?.let { Badge(it) }
@@ -412,7 +440,6 @@ private fun PreviewPane(
                 iconTint = if (isFavorite) Palette.Gold else null
             )
         }
-        Spacer(Modifier.height(14.dp))
-        HintBar("OK long" to if (isFavorite) "Retirer des favoris" else "Ajouter aux favoris")
+
     }
 }

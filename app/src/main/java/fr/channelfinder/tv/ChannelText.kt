@@ -6,6 +6,16 @@ import java.text.Normalizer
 object ChannelText {
     data class Label(val title: String, val country: String?, val badges: List<String>)
 
+    enum class VideoQuality(val label: String, val badge: String) {
+        UHD("4K", "4K"), FHD("Full HD", "FHD"), HD("HD", "HD"), SD("SD", "SD")
+    }
+
+    /** Best quality named in the channel name, else in its category ("FRANCE • UHD/4K", "FRANCE • SD"). */
+    fun quality(nameBadges: List<String>, categoryBadges: List<String>): VideoQuality? {
+        fun pick(badges: List<String>) = VideoQuality.entries.firstOrNull { it.badge in badges }
+        return pick(nameBadges) ?: pick(categoryBadges)
+    }
+
     // "|FR| TF1", "FR ‖ FRANCE", "┃PT┃ RTP", "[ES] …", "FR: …", "FR - …"
     private val countryPrefix = Regex("""^\s*[|\[(┃‖]?\s*([A-Z]{2,4})\s*[|\])┃‖:\-•]+\s*""")
     private val notCountries = setOf("TV", "HD", "SD", "FHD", "UHD", "VIP", "PPV", "NEW", "LIVE")
@@ -99,7 +109,13 @@ object ChannelText {
         val text = "$category $name".uppercase()
         val country = categoryLabel(category).country
         val base = when {
-            listOf("SPORT", "ESPN", "BEIN", "EUROSPORT", "RMC", "PPV", "NFL", "NBA", "UFC").any(text::contains) -> BrowseLane.SPORTS.label
+            // Sports only in French or Portuguese: other countries' sports stay in their category and search.
+            listOf("SPORT", "ESPN", "BEIN", "EUROSPORT", "RMC", "PPV", "NFL", "NBA", "UFC").any(text::contains) -> when {
+                country in eventLanguages -> BrowseLane.SPORTS.label
+                country == null && listOf("|FR|", "FR |", "┃FR┃", "FR ‖", "FRANCE", "|PT|", "PT |", "PT ‖", "PORTUGAL", "BRASIL").any(text::contains) ->
+                    BrowseLane.SPORTS.label
+                else -> OTHER
+            }
             country != null -> when {
                 country == "FR" -> BrowseLane.FRANCE.label
                 country in setOf("CA", "BE", "CH") && Regex("""\bFR\b|FRANCE""").containsMatchIn(category.uppercase()) -> BrowseLane.FRANCE.label

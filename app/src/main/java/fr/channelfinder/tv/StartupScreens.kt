@@ -343,7 +343,7 @@ private fun SettingsRow(
 ) {
     FocusSurface(onClick = onClick, modifier = modifier.fillMaxWidth(), focusedScale = 1.025f) {
         Row(
-            Modifier.padding(horizontal = 22.dp, vertical = 16.dp),
+            Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
