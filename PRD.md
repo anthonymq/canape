@@ -63,7 +63,7 @@ Measured on 2026-10-11 with a debug probe (`StreamProbe.kt`): the account allows
 
 ### Category picker
 
-The picker searches category labels locally (accent-insensitive). Rows are grouped under **Épinglées sur l’accueil**, France, Português, Sports, and Autres. OK opens a category; Right then OK (or a long press) pins it. Sections are recomputed when the list opens or the query changes, so pinning never moves the focused row. Returning from a category restores focus on it.
+The picker searches category labels locally (accent-insensitive). Rows are grouped under **Épinglées sur l’accueil**, France, Português, Sports, and Autres. OK opens a category; Right then OK (or a long press) pins it. Sections are recomputed when the list opens or the query changes, so pinning never moves the focused row. Returning from a category restores focus on it. When the provider publishes the same group twice under parallel prefixes (for example "┃FR┃ DISNEY+ LA LIGA" and "FR ‖ FR • DISNEY+ LA LIGA"), later copies are numbered in provider order: "DISNEY+ LA LIGA (2)". Same titles in different countries are told apart by their country badge instead.
 
 The supplied playlist snapshot identified `731` as `PT ‖ DESPORTO PORTUGAL` and `1278` as `PT ‖ VODAFONE`. Treat these as snapshot examples only; load category labels and IDs from the provider instead of hardcoding them.
 

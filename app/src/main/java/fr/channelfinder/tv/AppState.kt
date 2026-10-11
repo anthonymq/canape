@@ -242,6 +242,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
 
     private suspend fun applyCatalog(catalog: XtreamCatalog, savedAt: Long) {
         val started = android.os.SystemClock.elapsedRealtime()
+        withContext(Dispatchers.Default) { ChannelText.setCategories(catalog.categories.map { it.name }) }
         val byId = withContext(Dispatchers.Default) { catalog.channels.associateBy { it.id } }
         val categoryMap = withContext(Dispatchers.Default) { catalog.categories.associateBy { it.id } }
         val perCategory = withContext(Dispatchers.Default) { catalog.channels.groupingBy { it.categoryId }.eachCount() }

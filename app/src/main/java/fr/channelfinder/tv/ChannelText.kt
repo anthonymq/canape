@@ -58,8 +58,31 @@ object ChannelText {
 
     private val categoryLabels = java.util.concurrent.ConcurrentHashMap<String, Label>()
 
+    @Volatile private var categorySuffixes: Map<String, String> = emptyMap()
+
     /** Category labels repeat across thousands of channels, so parse each one once. */
-    fun categoryLabel(raw: String): Label = categoryLabels.getOrPut(raw) { parseLabel(raw) }
+    fun categoryLabel(raw: String): Label = categoryLabels.getOrPut(raw) {
+        parseLabel(raw).let { label -> categorySuffixes[raw]?.let { label.copy(title = label.title + it) } ?: label }
+    }
+
+    /**
+     * Providers publish some groups twice under parallel prefixes ("┃FR┃ DISNEY+ LA LIGA" and
+     * "FR ‖ FR • DISNEY+ LA LIGA"), which clean up to the same title. Number the later copies, in
+     * provider order, when title and country both match; a different country already shows as a badge.
+     */
+    fun setCategories(names: List<String>) {
+        val seen = HashMap<String, Int>()
+        val suffixes = HashMap<String, String>()
+        names.forEach { raw ->
+            val label = parseLabel(raw)
+            val key = "${label.country}|${normalize(label.title)}"
+            val copy = (seen[key] ?: 0) + 1
+            seen[key] = copy
+            if (copy > 1) suffixes[raw] = " ($copy)"
+        }
+        categorySuffixes = suffixes
+        categoryLabels.clear()
+    }
 
     fun parseLabel(raw: String): Label {
         var text = raw.trim()
