@@ -46,6 +46,7 @@ data class Channel(
         get() = event?.let { info -> listOfNotNull(info.competition, info.feed).joinToString(" · ").ifBlank { null } } ?: categoryLabel.title
     val countryTag: String? get() = label.country ?: categoryLabel.country
     val badges: List<String> get() = label.badges
+    val country: String? by lazy { ChannelText.countryCode(label.country) ?: ChannelText.countryCode(categoryLabel.country) }
     val quality: ChannelText.VideoQuality? by lazy { ChannelText.quality(label.badges, categoryLabel.badges) }
     val initials: String get() = ChannelText.initials(label.title)
 
@@ -69,7 +70,9 @@ sealed interface Page {
         val lane: BrowseLane,
         val categoryId: String? = null,
         val query: String = "",
-        val startSearch: Boolean = false
+        val startSearch: Boolean = false,
+        /** ISO country filter, only offered when the list mixes several countries. */
+        val country: String? = null
     ) : Page
     data class Player(val channelId: String, val playlist: List<String>) : Page
 }

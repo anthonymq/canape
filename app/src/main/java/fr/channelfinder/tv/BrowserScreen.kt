@@ -4,6 +4,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -70,6 +72,8 @@ import java.util.Locale
 
 private enum class PreviewState { WAITING, BUFFERING, READY, ERROR }
 
+private val qualityExemptLanes = setOf(BrowseLane.EVENTS, BrowseLane.FAVORITES, BrowseLane.RECENT)
+
 private val browseLanes = listOf(
     BrowseLane.FRANCE, BrowseLane.PORTUGUESE, BrowseLane.SPORTS, BrowseLane.EVENTS, BrowseLane.FAVORITES, BrowseLane.RECENT, BrowseLane.ALL
 )
@@ -80,7 +84,21 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val category = page.categoryId?.let(state.categoriesById::get)
     // Favorites/recents are captured when the list opens so un-starring a row does not yank focus away.
     val base = remember(state.channels, page.lane, page.categoryId) { state.channelsFor(page.lane, page.categoryId) }
-    val results = remember(base, page.query, state.qualityFilter) { state.search(base, page.query, state.qualityFilter) }
+    // Events rarely carry a quality tag, and favorites/recents are the viewer's own picks: no quality filter there.
+    val qualityApplies = page.categoryId != null || page.lane !in qualityExemptLanes
+    val quality = if (qualityApplies) state.qualityFilter else null
+    // Country filter: offered when the list mixes at least two countries with two channels or more each.
+    val countries = remember(base) {
+        base.groupingBy { it.country }.eachCount()
+            .filter { (code, count) -> code != null && count >= 2 }
+            .entries.sortedByDescending { it.value }.take(8).map { it.key!! }
+            .takeIf { it.size >= 2 }.orEmpty()
+    }
+    val country = page.country?.takeIf { it in countries }
+    val filterRowShown = qualityApplies || countries.isNotEmpty()
+    val results = remember(base, page.query, quality, country) {
+        state.search(if (country == null) base else base.filter { it.country == country }, page.query, quality)
+    }
     val selected = results.firstOrNull { it.id == state.selectedChannelId } ?: results.firstOrNull()
     val listState = state.browserListState
 
@@ -88,6 +106,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val selectedRowFocus = remember { FocusRequester() }
     val watchFocus = remember { FocusRequester() }
     val chipFocus = remember { browseLanes.associateWith { FocusRequester() } }
+    val countryFocus = remember { mutableMapOf<String?, FocusRequester>() }
     val qualityFocus = remember { (listOf<ChannelText.VideoQuality?>(null) + ChannelText.VideoQuality.entries).associateWith { FocusRequester() } }
     var editing by remember { mutableStateOf(page.startSearch) }
     var listHasFocus by remember { mutableStateOf(false) }
@@ -108,9 +127,9 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     }
 
     // A new query or lane starts again from the best match.
-    var lastFilter by remember { mutableStateOf(listOf(page.lane, page.categoryId, page.query, state.qualityFilter)) }
-    LaunchedEffect(page.lane, page.categoryId, page.query, state.qualityFilter) {
-        val filter = listOf(page.lane, page.categoryId, page.query, state.qualityFilter)
+    var lastFilter by remember { mutableStateOf(listOf(page.lane, page.categoryId, page.query, quality, country)) }
+    LaunchedEffect(page.lane, page.categoryId, page.query, quality, country) {
+        val filter = listOf(page.lane, page.categoryId, page.query, quality, country)
         if (filter != lastFilter) {
             lastFilter = filter
             state.selectedChannelId = null
@@ -127,9 +146,13 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     }
     val eyebrow = when {
         category != null -> listOfNotNull("Catégorie", category.countryTag).joinToString(" · ")
-        page.query.isNotBlank() -> "${number.format(results.size)} résultats pour « ${page.query.trim()} »"
-        state.qualityFilter != null -> "${number.format(results.size)} chaînes en ${state.qualityFilter!!.label}"
-        else -> "${number.format(results.size)} chaînes"
+        page.query.isNotBlank() -> "${number.format(results.size)} résultat${plural(results.size)} pour « ${page.query.trim()} »"
+        quality != null || country != null -> listOfNotNull(
+            "${number.format(results.size)} chaîne${plural(results.size)}",
+            quality?.let { "en ${it.label}" },
+            country?.let { ChannelText.countryLabel(it).substringAfter(' ') }
+        ).joinToString(" · ").replace(" · en ", " en ")
+        else -> "${number.format(results.size)} chaîne${plural(results.size)}"
     }
 
     Column(Modifier.fillMaxSize().padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.Top, bottom = 20.dp)) {
@@ -158,15 +181,21 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                     TvChip(
                         text = lane.label,
                         selected = lane == page.lane,
-                        onClick = { if (lane != page.lane) state.replaceTop(page.copy(lane = lane)) },
+                        onClick = { if (lane != page.lane) state.replaceTop(page.copy(lane = lane, country = null)) },
                         modifier = Modifier.focusRequester(chipFocus.getValue(lane))
+                            .then(if (filterRowShown) Modifier else Modifier.downToList(selectedRowFocus, results.isNotEmpty()))
                     )
                 }
             }
         }
-        // Quality filter: its own row so the lane chips stay on one line.
-        Row(
-            Modifier.padding(top = 8.dp)
+        // Filters share one row (scrolls sideways if long) so the list keeps its height.
+        if (filterRowShown) Row(
+            Modifier.padding(top = 8.dp).fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+        if (qualityApplies) Row(
+            Modifier
                 .focusProperties { onEnter = { runCatching { qualityFocus.getValue(state.qualityFilter).requestFocus() } } }
                 .focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -178,16 +207,36 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                     text = quality?.label ?: "Toutes",
                     selected = state.qualityFilter == quality,
                     onClick = { state.setQuality(quality) },
-                    modifier = Modifier.focusRequester(requester),
+                    modifier = Modifier.focusRequester(requester).downToList(selectedRowFocus, results.isNotEmpty()),
                     compact = true
                 )
             }
+        }
+        if (countries.isNotEmpty()) Row(
+            Modifier
+                .focusProperties { onEnter = { runCatching { countryFocus.getOrPut(country) { FocusRequester() }.requestFocus() } } }
+                .focusGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("PAYS", style = Type.Eyebrow, color = Palette.Faint, modifier = Modifier.padding(end = 4.dp))
+            (listOf<String?>(null) + countries).forEach { code ->
+                TvChip(
+                    text = code?.let(ChannelText::countryLabel) ?: "Tous",
+                    selected = country == code,
+                    onClick = { state.replaceTop(page.copy(country = code)) },
+                    modifier = Modifier.focusRequester(countryFocus.getOrPut(code) { FocusRequester() })
+                        .downToList(selectedRowFocus, results.isNotEmpty()),
+                    compact = true
+                )
+            }
+        }
         }
         Spacer(Modifier.height(8.dp))
 
         if (results.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                BrowseEmptyState(page, state)
+                BrowseEmptyState(page, state, quality)
             }
         } else {
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
@@ -232,11 +281,11 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
 }
 
 @Composable
-private fun BrowseEmptyState(page: Page.Browse, state: AppState) {
+private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: ChannelText.VideoQuality?) {
     when {
-        state.qualityFilter != null && state.search(state.channelsFor(page.lane, page.categoryId), page.query).isNotEmpty() -> EmptyState(
+        quality != null && state.search(state.channelsFor(page.lane, page.categoryId), page.query).isNotEmpty() -> EmptyState(
             Icons.Rounded.SearchOff,
-            "Aucune chaîne en ${state.qualityFilter!!.label} ici",
+            "Aucune chaîne en ${quality.label} ici",
             "Cette sélection existe dans d’autres qualités."
         ) {
             TvButton("Toutes les qualités", { state.setQuality(null) }, icon = Icons.Rounded.Clear, primary = true)
@@ -443,3 +492,9 @@ private fun PreviewPane(
 
     }
 }
+
+private fun plural(count: Int) = if (count > 1) "s" else ""
+
+/** Down from a filter chip lands on the list, never on the preview buttons that sit lower right. */
+private fun Modifier.downToList(list: FocusRequester, hasResults: Boolean): Modifier =
+    if (hasResults) focusProperties { down = list } else this

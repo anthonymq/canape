@@ -73,6 +73,10 @@ The browser uses two panes: a focusable channel list on the left and a 16:9 live
 
 A **Qualité** row under the lane chips filters the list by video quality (Toutes, 4K, Full HD, HD, SD), read from the channel name's quality tag or, failing that, the category's ("FRANCE • UHD/4K", "FRANCE • SD"). Channels without a quality tag only appear under Toutes. The choice is remembered between sessions and applies to every lane; an empty result offers **Toutes les qualités**.
 
+Quality is not applied in Événements, Favoris and Récents (events rarely carry a quality tag; favorites and recents are the viewer's own picks), and the row is hidden there.
+
+A **Pays** filter sits in the same row whenever the list on screen (lane or category) mixes at least two countries with two or more channels each, for example Brésil/Portugal in Português or the countries of `LT | LATINO`. Countries come from the channel's prefix, else its category's, mapped to ISO codes (IND→IN, USA→US…); provider prefixes that are regions or languages (EU, LA, AS, AF, AR…) are never shown as countries and such channels only appear under **Tous**. The country choice belongs to the current list and resets when the lane or category changes.
+
 Search ranks matches (exact name, then name prefix, then word prefix, then anywhere), ignores accents, and requires every typed word to match. Channel names are cleaned for display only (`ChannelText.kt`): country prefixes such as `|FR|` become a badge and quality suffixes (HD, FHD, 4K, HEVC…) become badges. Raw names are still searched.
 
 When returning from full-screen playback, restore the selected channel and list position. While the stream buffers, show a clear progress message. If preview playback fails, explain that the viewer can still try full-screen playback. An empty search result should remove the preview and provide a clear empty state. The D-pad must be able to move from the search field into the results.

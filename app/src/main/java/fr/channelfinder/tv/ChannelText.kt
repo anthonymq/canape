@@ -10,6 +10,28 @@ object ChannelText {
         UHD("4K", "4K"), FHD("Full HD", "FHD"), HD("HD", "HD"), SD("SD", "SD")
     }
 
+    // Provider prefixes that are spelling variants of a country code.
+    private val countryAliases = mapOf(
+        "IND" to "IN", "USA" to "US", "ITA" to "IT", "UK" to "GB", "SR" to "RS", "PERU" to "PE", "COL" to "CO",
+        "EGY" to "EG", "PAN" to "PA", "RDOM" to "DO", "MEX" to "MX", "ESP" to "ES", "POR" to "PT", "BRA" to "BR"
+    )
+    // Prefixes providers use for regions or languages, which collide with real ISO codes (AR = Arabic, AF = Africa…).
+    private val notCountryCodes = setOf("AR", "AF", "AS", "LA", "LT", "EU", "EN", "KU", "KD", "EX")
+    private val isoCountries = java.util.Locale.getISOCountries().toSet()
+
+    /** ISO country code behind a provider prefix, or null when it is a region, language or label. */
+    fun countryCode(tag: String?): String? {
+        val code = tag?.uppercase()?.let { countryAliases[it] ?: it } ?: return null
+        return code.takeIf { it.length == 2 && it in isoCountries && it !in notCountryCodes }
+    }
+
+    /** "🇧🇷 Brésil" for "BR". */
+    fun countryLabel(code: String): String {
+        val flag = code.uppercase().map { Character.toChars(0x1F1E6 + (it - 'A')).concatToString() }.joinToString("")
+        val name = java.util.Locale("", code).getDisplayCountry(java.util.Locale.FRENCH).replaceFirstChar { it.titlecase(java.util.Locale.FRENCH) }
+        return "$flag $name"
+    }
+
     /** Best quality named in the channel name, else in its category ("FRANCE • UHD/4K", "FRANCE • SD"). */
     fun quality(nameBadges: List<String>, categoryBadges: List<String>): VideoQuality? {
         fun pick(badges: List<String>) = VideoQuality.entries.firstOrNull { it.badge in badges }
