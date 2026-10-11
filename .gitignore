@@ -1,0 +1,17 @@
+# Build output
+build/
+.gradle/
+.kotlin/
+*.apk
+*.aab
+
+# Local machine files
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+
+# Never commit credentials
+*.env
+secrets.*

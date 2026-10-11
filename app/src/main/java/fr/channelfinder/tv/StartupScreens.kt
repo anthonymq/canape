@@ -1,0 +1,376 @@
+package fr.channelfinder.tv
+
+import android.net.Uri
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.ManageAccounts
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SportsSoccer
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.Text
+import kotlinx.coroutines.delay
+import java.text.NumberFormat
+import java.util.Locale
+
+@Composable
+fun AppMark(size: androidx.compose.ui.unit.Dp = 56.dp) {
+    Box(
+        Modifier.size(size).clip(RoundedCornerShape(size / 4))
+            .background(Brush.linearGradient(listOf(Color(0xFF5B8FE8), Color(0xFF2B4F9E)))),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Rounded.LiveTv, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.56f))
+    }
+}
+
+@Composable
+fun LoadingScreen(step: LoadStep) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(max = 560.dp)) {
+            AppMark(72.dp)
+            Spacer(Modifier.height(28.dp))
+            Text("Préparation de vos chaînes", style = Type.Display, color = Palette.OnSurface)
+            Spacer(Modifier.height(10.dp))
+            Text(step.label, style = Type.Body, color = Palette.Muted)
+            Spacer(Modifier.height(26.dp))
+            IndeterminateBar(Modifier.width(360.dp))
+            if (step != LoadStep.OPENING) {
+                Spacer(Modifier.height(18.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LoadStep.entries.drop(1).forEach { item ->
+                        Box(
+                            Modifier.size(10.dp).background(
+                                if (item.ordinal <= step.ordinal) Palette.Accent else Palette.Outline, CircleShape
+                            )
+                        )
+                    }
+                }
+                Spacer(Modifier.height(30.dp))
+                Text(
+                    "Le premier chargement peut prendre quelques secondes. Ensuite, l’accueil s’ouvre immédiatement.",
+                    style = Type.Caption, color = Palette.Faint, textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IndeterminateBar(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "bar")
+    val offset by transition.animateFloat(
+        0f, 1f, infiniteRepeatable(tween(1300, easing = LinearEasing), RepeatMode.Restart), label = "offset"
+    )
+    Box(modifier.height(6.dp).clip(CircleShape).background(Palette.Surface2)) {
+        Box(
+            Modifier.fillMaxHeight().fillMaxWidth(0.35f)
+                .padding(start = 0.dp)
+                .align(Alignment.CenterStart)
+                .graphicsOffset(offset)
+                .background(Palette.Accent, CircleShape)
+        )
+    }
+}
+
+private fun Modifier.graphicsOffset(progress: Float): Modifier = this.then(
+    Modifier.layout { measurable, constraints ->
+        val placeable = measurable.measure(constraints)
+        val parentWidth = constraints.maxWidth / 0.35f
+        val x = (-placeable.width + (parentWidth + placeable.width) * progress).toInt()
+        layout(placeable.width, placeable.height) { placeable.place(x, 0) }
+    }
+)
+
+@Composable
+fun LoadErrorScreen(message: String, onRetry: () -> Unit, onEditAccount: () -> Unit) {
+    val retryFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(50); runCatching { retryFocus.requestFocus() } }
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        EmptyState(
+            icon = Icons.Rounded.CloudOff,
+            title = "Impossible de charger vos chaînes",
+            message = message
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                TvButton("Réessayer", onRetry, Modifier.focusRequester(retryFocus), icon = Icons.Rounded.Refresh, primary = true)
+                TvButton("Modifier le compte", onEditAccount, icon = Icons.Rounded.ManageAccounts)
+            }
+        }
+    }
+}
+
+@Composable
+fun SetupScreen(state: AppState, page: Page.Setup) {
+    val existing = state.account
+    var server by remember { mutableStateOf(existing?.serverUrl.orEmpty()) }
+    var username by remember { mutableStateOf(existing?.username.orEmpty()) }
+    var password by remember { mutableStateOf(existing?.password.orEmpty()) }
+    var error by remember { mutableStateOf(page.message) }
+    var editingField by remember { mutableStateOf(-1) }
+    val fieldFocus = remember { List(3) { FocusRequester() } }
+    val connectFocus = remember { FocusRequester() }
+
+    LaunchedEffect(Unit) {
+        delay(60)
+        val firstEmpty = listOf(server, username, password).indexOfFirst(String::isBlank)
+        runCatching { if (firstEmpty >= 0) fieldFocus[firstEmpty].requestFocus() else connectFocus.requestFocus() }
+    }
+
+    fun submit() {
+        val address = server.trim().let { if (it.contains("://")) it else "http://$it" }.trimEnd('/')
+        val host = runCatching { Uri.parse(address).host }.getOrNull()
+        error = when {
+            server.isBlank() -> "Saisissez l’adresse du serveur fournie par votre fournisseur."
+            host.isNullOrBlank() -> "Adresse du serveur invalide. Exemple : http://serveur.exemple:8080"
+            !address.startsWith("http://") && !address.startsWith("https://") -> "L’adresse doit commencer par http:// ou https://."
+            username.isBlank() || password.isBlank() -> "Saisissez votre utilisateur et votre mot de passe."
+            else -> ""
+        }
+        if (error.isBlank()) {
+            server = address
+            state.connect(XcAccount(address, username.trim(), password)) { message ->
+                error = message
+                runCatching { connectFocus.requestFocus() }
+            }
+        }
+    }
+
+    Row(
+        Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top),
+        horizontalArrangement = Arrangement.spacedBy(56.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(0.85f)) {
+            AppMark()
+            Spacer(Modifier.height(24.dp))
+            Text("CHANNEL FINDER", style = Type.Eyebrow, color = Palette.Accent)
+            Spacer(Modifier.height(8.dp))
+            Text(if (existing == null) "Connectez votre service TV" else "Modifier le compte", style = Type.Display, color = Palette.OnSurface)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Saisissez les informations données par votre fournisseur. Elles restent chiffrées sur cette TV.",
+                style = Type.Body, color = Palette.Muted
+            )
+            Spacer(Modifier.height(28.dp))
+            Feature(Icons.Rounded.SportsSoccer, "France, Português et Sports en accès direct")
+            Feature(Icons.Rounded.Search, "Recherche instantanée dans toutes vos chaînes")
+            Feature(Icons.Rounded.Star, "Favoris et dernières chaînes à portée de main")
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            FieldLabel("Adresse du serveur")
+            TvTextField(
+                value = server, onValueChange = { server = it }, placeholder = "http://serveur:port",
+                editing = editingField == 0, onEditingChange = { editingField = if (it) 0 else -1 },
+                icon = Icons.Rounded.Dns, keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next,
+                onImeAction = { editingField = 1 }, outerFocusRequester = fieldFocus[0], modifier = Modifier.fillMaxWidth()
+            )
+            FieldLabel("Utilisateur")
+            TvTextField(
+                value = username, onValueChange = { username = it }, placeholder = "Nom d’utilisateur",
+                editing = editingField == 1, onEditingChange = { editingField = if (it) 1 else -1 },
+                icon = Icons.Rounded.Person, imeAction = ImeAction.Next,
+                onImeAction = { editingField = 2 }, outerFocusRequester = fieldFocus[1], modifier = Modifier.fillMaxWidth()
+            )
+            FieldLabel("Mot de passe")
+            TvTextField(
+                value = password, onValueChange = { password = it }, placeholder = "Mot de passe",
+                editing = editingField == 2, onEditingChange = { editingField = if (it) 2 else -1 },
+                icon = Icons.Rounded.Key, keyboardType = KeyboardType.Password, password = true, imeAction = ImeAction.Done,
+                onImeAction = { runCatching { connectFocus.requestFocus() } }, outerFocusRequester = fieldFocus[2],
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(4.dp))
+            Callout(
+                Icons.Rounded.WarningAmber, Palette.Warning, Palette.WarningSurface,
+                "Avec une adresse http://, l’utilisateur, le mot de passe et les flux ne sont pas chiffrés pendant le transport."
+            )
+            if (error.isNotBlank()) Callout(Icons.Rounded.ErrorOutline, Palette.Error, Palette.ErrorSurface, error)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                TvButton(
+                    if (state.connecting) "Connexion…" else "Se connecter",
+                    onClick = ::submit,
+                    modifier = Modifier.focusRequester(connectFocus),
+                    icon = Icons.Rounded.Lock,
+                    primary = true,
+                    enabled = !state.connecting
+                )
+                if (state.connecting) {
+                    Spinner(Modifier.size(24.dp), color = Palette.Accent, stroke = 3.dp)
+                    Text(state.loadStep.label, style = Type.Caption, color = Palette.Muted)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldLabel(text: String) {
+    Text(text, style = Type.Caption, color = Palette.Muted, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+}
+
+@Composable
+private fun Feature(icon: ImageVector, text: String) {
+    Row(Modifier.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        Box(Modifier.size(36.dp).background(Palette.Surface2, CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = Palette.Accent, modifier = Modifier.size(20.dp))
+        }
+        Text(text, style = Type.Body, color = Palette.OnSurface)
+    }
+}
+
+@Composable
+fun Callout(icon: ImageVector, tone: Color, surface: Color, text: String) {
+    Row(
+        Modifier.fillMaxWidth().background(surface, RoundedCornerShape(12.dp))
+            .border(1.dp, tone.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(icon, contentDescription = null, tint = tone, modifier = Modifier.size(22.dp))
+        Text(text, style = Type.Caption, color = tone)
+    }
+}
+
+@Composable
+fun SettingsScreen(state: AppState) {
+    val context = LocalContext.current
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { delay(50); runCatching { firstFocus.requestFocus() } }
+    val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
+    val version = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
+    }
+    val host = state.account?.serverUrl?.let { runCatching { Uri.parse(it).host }.getOrNull() }.orEmpty()
+    val updated = describeUpdate(state.lastUpdated)
+
+    Column(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
+        ScreenHeader("Channel Finder", "Réglages", trailing = { Clock() })
+        Spacer(Modifier.height(28.dp))
+        Column(Modifier.widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SettingsRow(
+                icon = Icons.Rounded.Refresh,
+                title = if (state.refreshing) "Actualisation en cours…" else "Actualiser la liste des chaînes",
+                subtitle = "Dernière mise à jour : $updated",
+                modifier = Modifier.focusRequester(firstFocus),
+                trailing = { if (state.refreshing) Spinner(Modifier.size(24.dp), color = LocalContentColor.current, stroke = 3.dp) }
+            ) { state.refresh(silent = false) }
+            SettingsRow(
+                icon = Icons.Rounded.ManageAccounts,
+                title = "Modifier le compte",
+                // The Xtream username is half of the credentials: never show it on a shared screen.
+                subtitle = if (host.isBlank()) "Serveur, utilisateur et mot de passe" else "Serveur : $host"
+            ) { state.editAccount() }
+            SettingsRow(
+                icon = Icons.Rounded.History,
+                title = "Effacer les chaînes récentes",
+                subtitle = if (state.recent.isEmpty()) "L’historique est vide" else "${state.recent.size} chaînes dans l’historique"
+            ) { state.clearRecent() }
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            "Channel Finder $version · ${number.format(state.channels.size)} chaînes · ${number.format(state.categories.size)} catégories",
+            style = Type.Caption, color = Palette.Faint
+        )
+        Spacer(Modifier.height(12.dp))
+        HintBar("OK" to "Choisir", "RETOUR" to "Accueil")
+    }
+}
+
+@Composable
+private fun SettingsRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {},
+    onClick: () -> Unit
+) {
+    FocusSurface(onClick = onClick, modifier = modifier.fillMaxWidth(), focusedScale = 1.025f) {
+        Row(
+            Modifier.padding(horizontal = 22.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = Type.TitleSmall)
+                Text(subtitle, style = Type.Caption, color = secondaryColor(), maxLines = 1)
+            }
+            trailing()
+        }
+    }
+}
+
+private fun describeUpdate(timestamp: Long): String {
+    if (timestamp <= 0) return "jamais"
+    val minutes = (System.currentTimeMillis() - timestamp) / 60_000
+    val time = java.text.SimpleDateFormat("HH:mm", Locale.FRANCE).format(java.util.Date(timestamp))
+    return when {
+        minutes < 1 -> "à l’instant"
+        minutes < 60 -> "il y a $minutes min"
+        isToday(timestamp) -> "aujourd’hui à $time"
+        else -> "le ${java.text.SimpleDateFormat("d MMMM", Locale.FRANCE).format(java.util.Date(timestamp))} à $time"
+    }
+}
+
+private fun isToday(timestamp: Long): Boolean {
+    val a = java.util.Calendar.getInstance()
+    val b = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
+    return a.get(java.util.Calendar.YEAR) == b.get(java.util.Calendar.YEAR) && a.get(java.util.Calendar.DAY_OF_YEAR) == b.get(java.util.Calendar.DAY_OF_YEAR)
+}

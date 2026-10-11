@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Xtream providers commonly serve the API and streams over HTTP, and redirect
+         streams to other hosts (often bare IPs), so cleartext cannot be host-scoped. -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

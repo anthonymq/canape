@@ -1,0 +1,156 @@
+# Channel Finder TV Product Requirements
+
+_Last updated: 2026-10-11 (UI/UX overhaul)_
+
+## Product summary
+
+Channel Finder TV is a Google TV / Android TV app for finding live channels in a large user-supplied Xtream Codes playlist. It is designed for a viewer who finds typical IPTV apps difficult to navigate. The playlist currently contains 24,057 live channels, so the product prioritizes direct destinations, local search, simple favorites, and a live preview while browsing.
+
+The project is a working prototype. It builds a debug APK, runs on a Google TV emulator (Android 14), loads the full playlist, and plays live streams in both the muted preview and full screen. It has not yet been tested on a physical Google TV device (see [Known issues](#known-issues)). The UI follows the Android TV design guidelines (developer.android.com/design/ui/tv): 58 dp side / 28 dp top-bottom safe margins, standard card widths, a single focus treatment, no on-screen back buttons, and Back-to-top on Home.
+
+## User and problem
+
+The primary viewer is a family member using a TV remote, not a phone or mouse. He wants to find French and Portuguese channels quickly, with sports easy to reach. The playlist is much larger than can be browsed comfortably as one long list. There is no separate EPG source.
+
+The interface must work with D-pad focus and OK/Back actions. It should make the next useful action obvious and avoid requiring the viewer to understand provider category IDs or Xtream terminology.
+
+## Goals
+
+- Make French, Portuguese, sports, channel favorites, recent channels, and pinned categories reachable directly from Home.
+- Let viewers search the local channel catalog without waiting for another provider request.
+- Let viewers pin a provider category from a searchable category picker and reopen it from Home.
+- Show a muted live preview for the focused channel in the browser, then open that channel full-screen with OK.
+- Keep browsing responsive and predictable with a playlist of roughly 24,000 channels.
+- Store the account securely at rest and keep account details out of source code and documentation.
+
+## Non-goals for the current release
+
+- A program guide grid, recording, catch-up TV, parental controls, or channel editing.
+- Providing or hosting any TV content. The app is a client for a user's own service account.
+- A phone-first interface or touch-only interaction.
+- Automatic metadata enrichment from third-party services.
+
+## Core experience
+
+### First run and account setup
+
+1. The viewer enters the Xtream server address, username, and password. Focusing a field never opens the keyboard; OK starts editing, and the keyboard's Next action moves to the next field. An address without a scheme gets `http://`.
+2. The app validates the account by loading the catalog, and only then saves it encrypted with AES/GCM using a key held by Android Keystore.
+3. Home opens. The catalog is cached on device (`CatalogCache.kt`, metadata only), so later launches open Home from the cache and refresh silently in the background.
+4. Connection, authentication, and unexpected-response failures are shown in plain language on the form, which keeps what the viewer typed. A failed load for a saved account shows **Réessayer** / **Modifier le compte**.
+5. **Réglages** (gear on Home) offers: refresh the channel list, change the account (server shown, never the username), and clear recents.
+
+Many Xtream providers only offer HTTP and redirect stream requests to other servers (often bare IP addresses), so the app permits cleartext traffic to any host. The setup screen warns that HTTP does not protect account details or streams in transit. Keep this warning visible; encrypted local storage does not encrypt network traffic.
+
+### Home
+
+Home should answer “what can I watch quickly?” It is a vertical stack of rows: three large lane cards (France, Português, Sports, 268 dp), four shortcuts (Rechercher, Favoris, Récents, Catégories, 196 dp), **Reprendre** (recent channels with logos, OK plays directly), **Mes favoris**, and **Catégories épinglées**. The France card has focus when Home opens; returning to Home restores the last focused card. Back from anywhere below the first card scrolls to the top and focuses France; Back from France leaves the app (no confirmation).
+
+Pinned category shortcuts show their category label and channel count. Selecting a shortcut opens the category's channel list directly. Category favorites are stored locally by Xtream category ID, not by parsing the category label.
+
+### Category picker
+
+The picker searches category labels locally (accent-insensitive). Rows are grouped under **Épinglées sur l’accueil**, France, Português, Sports, and Autres. OK opens a category; Right then OK (or a long press) pins it. Sections are recomputed when the list opens or the query changes, so pinning never moves the focused row. Returning from a category restores focus on it.
+
+The supplied playlist snapshot identified `731` as `PT ‖ DESPORTO PORTUGAL` and `1278` as `PT ‖ VODAFONE`. Treat these as snapshot examples only; load category labels and IDs from the provider instead of hardcoding them.
+
+### Channel browser and preview
+
+The browser uses two panes: a focusable channel list on the left and a 16:9 live preview with channel details and actions on the right. Moving focus to a channel updates the preview selection. The preview starts muted after 650 ms without a focus change, which avoids opening a new stream for every quick D-pad movement. The viewer can choose **Regarder** or press OK on a channel row to open full-screen playback. Favorites are toggled with a long press on OK (any channel row or card) or the preview's favorite button; rows have no second focus target. Right from the list always lands on **Regarder**; Up from the list lands on the selected lane chip; Left/Down return to the last focused row. Rows show the provider logo (Coil, bounded to 256 px, initials fallback), a cleaned name, country and quality badges, and a star for favorites. The previewed row stays highlighted while focus is in the preview pane.
+
+Search ranks matches (exact name, then name prefix, then word prefix, then anywhere), ignores accents, and requires every typed word to match. Channel names are cleaned for display only (`ChannelText.kt`): country prefixes such as `|FR|` become a badge and quality suffixes (HD, FHD, 4K, HEVC…) become badges. Raw names are still searched.
+
+When returning from full-screen playback, restore the selected channel and list position. While the stream buffers, show a clear progress message. If preview playback fails, explain that the viewer can still try full-screen playback. An empty search result should remove the preview and provide a clear empty state. The D-pad must be able to move from the search field into the results.
+
+### Full-screen playback
+
+Media3/ExoPlayer plays the selected live stream with sound; there is no seek bar (live TV). A channel banner (logo, name, badges, position in list, clock, previous/next channel) shows on start and on any key, and hides after 5 s; OK toggles it. Up/Down (and CH+/CH−) zap through the list the channel was opened from; the banner follows immediately and the stream switches once the viewer pauses (500 ms). A failed stream is retried once silently; then a card explains the failure in plain language (HTTP 407, 404, connection limits, unsupported format…) with **Réessayer** and **Chaîne suivante**. Back returns to the previous screen (an in-app back stack) with the last watched channel selected.
+
+## Functional requirements
+
+| ID | Requirement | Current status |
+| --- | --- | --- |
+| FR-1 | Load live categories and live streams through the Xtream player API. | Verified on emulator: 24,057 channels load. |
+| FR-2 | Keep channel ID, category ID, category label, logo URL, EPG ID, and derived lane with each channel. | Implemented. |
+| FR-3 | Search channel names, category labels, and lane labels locally. | Verified: "TF1" returns 36 ranked results, exact match first; D-pad leaves the field. |
+| FR-4 | Classify French, Portuguese, and sports channels into direct Home lanes. | Implemented with heuristics; Português includes non-Portuguese channels. |
+| FR-5 | Pin/unpin categories and open them directly from Home. | Verified on emulator: pin from picker, card appears on Home. |
+| FR-6 | Pin/unpin channels and retain a recent-channel list. | Verified on emulator: long-press favorite, Home row, recents ordered by recency. |
+| FR-7 | Preview the selected live channel while browsing, muted by default and delayed until focus settles. | Verified on emulator: plays muted; failure state shown. |
+| FR-8 | Open a channel full-screen and restore the prior browsing context on Back. | Verified on emulator: plays with sound; zapping works; Back restores the last watched row. |
+| FR-9 | Show an EPG marker only when a channel has an EPG ID. | Verified ("GUIDE" marker shown). No guide data is available. |
+
+## Technical design
+
+- **Platform:** Native Kotlin Android app using Jetpack Compose for TV and Android TV launcher metadata.
+- **Toolchain:** JDK 17, Gradle 9.8.1, Android Gradle plugin 9.4.1 (built-in Kotlin), Kotlin Compose compiler plugin 2.4.21, compileSdk 37, targetSdk 35, minSdk 23, Compose BOM 2026.09.00, Media3 1.11.1.
+- **Navigation and screen state:** `Page` and `BrowseLane` in `Channel.kt`; the current screen flow is managed in `MainActivity.kt`.
+- **Provider access:** `XtreamRepository.kt` calls `player_api.php` actions `get_live_categories` and `get_live_streams`. It maps `category_id` to `category_name`, and maps each live stream's `stream_id`, `name`, `category_id`, `stream_icon`, and `epg_channel_id` into a `Channel`.
+- **Stream URL:** Live playback is built as `/live/{username}/{password}/{stream_id}.ts` by `XtreamRepository.streamUrl`. The provider redirects these requests to separate stream servers.
+- **Playback:** `buildStreamPlayer` in `MainActivity.kt` creates the ExoPlayer used for both browser preview and full-screen playback. It uses a `DefaultHttpDataSource` with a VLC User-Agent, cross-protocol redirects, and explicit timeouts. The browser preview has its own player, is muted, and is released when the browser leaves composition.
+- **Persistence:** `CredentialStore.kt` encrypts account data with AES/GCM and Android Keystore. Channel favorites, category favorites, and recent IDs use local SharedPreferences.
+- **Performance:** The catalog and ID lookup map are held in memory (about 135 MB PSS on the emulator with the full catalog). Channel results render in a LazyColumn; search and lane filtering are local. Counts are grouped for Home and the category picker.
+- **Network policy:** `network_security_config.xml` permits cleartext traffic to all hosts, because Xtream stream servers are not known in advance. Credentials are present in Xtream request and playback URLs, so avoid logging them or sharing live-session logs.
+
+## Product quality and acceptance checks
+
+Before calling a build ready, verify on a Google TV device or emulator with a representative large playlist:
+
+1. The app installs, launches from the TV home screen, and remains usable with only the remote.
+2. Home reaches each lane and pinned category without typing or scrolling through the full playlist.
+3. Category search finds known French and Portuguese categories; stars pin and unpin them; pinned categories persist after app restart.
+4. Channel search updates locally; an empty result is understandable and does not leave stale video playing.
+5. D-pad focus changes the preview only after it settles; rapid movement does not start a stream per row; preview has no audio.
+6. OK starts full-screen playback. Back restores the same selected row and scroll position. Favorites and Recents remain correct.
+7. Preview buffering, unavailable streams, invalid credentials, network timeouts, and unsupported stream formats produce useful UI states instead of a crash.
+8. The app remains responsive while searching and scrolling through the full playlist. Measure on the target device rather than assuming emulator performance represents the TV.
+
+### Emulator results (2026-10-11, Google TV 1080p, Android 14, debug build)
+
+| Check | Result |
+| --- | --- |
+| 1 | Installs with a TV banner and launches from the TV launcher. Every screen verified with the D-pad only. |
+| 2 | All lanes and shortcuts visible on the first Home screen; pinned categories reachable from Home. |
+| 3 | Category search and pinning verified; pins persist across restarts. |
+| 4 | Search updates locally; empty result removes the preview and offers **Chercher partout** / **Effacer la recherche**. |
+| 5 | Preview plays muted after focus settles. Rapid-movement behavior not yet measured on device. |
+| 6 | Full screen plays with sound; zapping with Up/Down; Back restores the last watched row. Favorites and recents verified. |
+| 7 | Preview and full-screen failures show plain-language messages; full screen offers retry / next channel. Invalid credentials and timeouts map to plain-language setup errors (not yet exercised against a real failure). |
+| 8 | Cold start from cache ≈ 4 s on the emulator with a debug build (≈ 3.3 s reading the cache); a release build on hardware should be faster. Not yet measured on a target device. |
+
+## Known issues
+
+- **Lane classification:** `ChannelText.classifyLane` matches text loosely. Português includes channels such as "|ES| Trace Brasil". On 2026-10-11 the `‖` / `|PT|` / `|FR|` separators were added, so `PT ‖ …` categories (for example Vodafone) now reach Português (418 → 493 channels) and France grew from 2,064 to 2,124. The France lane still opens on France 3 regional channels, several of which fail on the provider side.
+- **Catalog cache read time:** reading ~24k channels from the binary cache takes about 3 s on the emulator with a debug build. Measure on the target TV with a release build before optimizing further.
+- **Logos depend on the provider:** many `stream_icon` URLs are empty or fail; rows fall back to initials.
+- **Display-name cleanup is heuristic:** only known country-code prefixes and quality tokens are stripped. Raw names are still searched.
+- **Preview may use an additional provider connection.** Verify provider connection limits on-device.
+- **HTTP exposes traffic in transit.** Credentials are encrypted at rest, but the provider endpoint does not protect API or stream requests over the network.
+- **No EPG source is configured.** The "GUIDE" badge only marks channels with an EPG ID. Do not build a guide screen until the user supplies a valid EPG source or chooses a metadata strategy.
+- **Category and channel favorites are device-local.** They do not sync between devices or provider accounts. Recents are cleared when the account changes.
+
+## Next steps
+
+1. Install on a physical Google TV device: measure cold start, memory, scrolling, and preview connection limits with a release build.
+2. Review lane classification against the full playlist and record false positives/negatives before changing rules; order lanes so major channels come first.
+3. Exercise the failure paths against real failures: wrong password, unreachable server, timeout.
+4. Decide whether the catalog cache needs a faster format (for example a database) after measuring on hardware.
+
+## Key files
+
+| File | Purpose |
+| --- | --- |
+| `app/src/main/java/fr/channelfinder/tv/MainActivity.kt` | Activity, theme, root back handling, screen routing. |
+| `AppState.kt` | Back stack, catalog loading/refresh, favorites, pins, recents, per-screen focus/scroll state. |
+| `Theme.kt` / `Components.kt` | Design tokens (palette, spacing, type) and shared TV components: focus surfaces, buttons, chips, logos, text field, hints, notices. |
+| `HomeScreen.kt`, `BrowserScreen.kt`, `CategoryScreen.kt`, `PlayerScreen.kt`, `StartupScreens.kt` | Screens (setup, loading, error and settings live in `StartupScreens.kt`). |
+| `Playback.kt` | `buildStreamPlayer`, the non-focusable video surface, and plain-language playback errors. |
+| `ChannelText.kt` | Display-name cleanup, badges, lane classification, accent-insensitive ranked search. |
+| `CatalogCache.kt` | Binary on-device catalog cache (metadata only, account identified by hash). |
+| `XtreamRepository.kt` | Xtream category/channel requests, load steps, error translation, live stream URL creation. |
+| `Channel.kt` | Account, category, channel, lane, and page models. |
+| `CredentialStore.kt` | Encrypted account persistence using Android Keystore. |
+| `app/src/main/AndroidManifest.xml` | TV app, launcher banner and icon. |
+| `app/src/main/res/mipmap-*/banner.png` | 16:9 TV launcher banner (with app name) and icon at every density. |
+| `app/src/main/res/xml/network_security_config.xml` | Cleartext policy (all hosts). |
+| `app/build.gradle.kts` | Android, Compose for TV, Media3, Coil, and Material icons dependencies. |

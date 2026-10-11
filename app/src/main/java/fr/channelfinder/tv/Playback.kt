@@ -1,0 +1,69 @@
+package fr.channelfinder.tv
+
+import android.content.Context
+import android.view.ViewGroup
+import androidx.annotation.OptIn
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+
+// Many Xtream providers reject Android's default Dalvik User-Agent on stream requests (HTTP 407),
+// so identify as a widely accepted IPTV player and follow redirects to the stream servers.
+private const val STREAM_USER_AGENT = "VLC/3.0.21 LibVLC/3.0.21"
+
+fun buildStreamPlayer(context: Context): ExoPlayer {
+    val httpFactory = DefaultHttpDataSource.Factory()
+        .setUserAgent(STREAM_USER_AGENT)
+        .setAllowCrossProtocolRedirects(true)
+        .setConnectTimeoutMs(15_000)
+        .setReadTimeoutMs(30_000)
+    return ExoPlayer.Builder(context)
+        .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(httpFactory))
+        .build()
+}
+
+/** A bare video surface: no Media3 controls (live TV has nothing to seek) and never focusable. */
+@OptIn(UnstableApi::class)
+fun videoSurface(context: Context): PlayerView = PlayerView(context).apply {
+    useController = false
+    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+    setShutterBackgroundColor(android.graphics.Color.BLACK)
+    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+    keepScreenOn = true
+    isFocusable = false
+    isFocusableInTouchMode = false
+    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+}
+
+/** Plain-language reason a stream failed. Never includes the URL, which embeds credentials. */
+fun playbackErrorMessage(error: PlaybackException): String {
+    var cause: Throwable? = error
+    while (cause != null && cause !is HttpDataSource.InvalidResponseCodeException) cause = cause.cause
+    if (cause is HttpDataSource.InvalidResponseCodeException) {
+        return when (val code = cause.responseCode) {
+            401, 403 -> "Le fournisseur refuse l’accès à cette chaîne (erreur $code)."
+            404, 410 -> "Cette chaîne n’est plus proposée par le fournisseur."
+            407 -> "Le fournisseur bloque cette chaîne pour le moment (erreur 407)."
+            429, 458, 509 -> "Trop d’appareils regardent en même temps sur ce compte. Arrêtez la lecture ailleurs, puis réessayez."
+            in 500..599 -> "Le serveur de la chaîne rencontre un problème (erreur $code)."
+            else -> "Le fournisseur a refusé la lecture (erreur $code)."
+        }
+    }
+    return when (error.errorCode) {
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "La chaîne ne répond pas. Vérifiez la connexion Internet, puis réessayez."
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
+        PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> "Le format de cette chaîne n’est pas pris en charge par cette TV."
+        else -> "Cette chaîne ne peut pas être lue pour le moment."
+    }
+}
