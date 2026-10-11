@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -191,14 +192,14 @@ private fun PinButton(pinned: Boolean, onClick: () -> Unit) {
     FocusSurface(
         onClick = onClick,
         interactionSource = interaction,
-        modifier = Modifier.width(150.dp).height(42.dp),
+        modifier = Modifier.height(42.dp).widthIn(min = 42.dp),
         shape = CircleShape,
         container = if (pinned) Palette.AccentDeep else Palette.Ink,
         outline = if (pinned) Palette.Accent else Palette.Outline,
         focusedScale = 1.06f
     ) {
         Row(
-            Modifier.align(Alignment.Center),
+            Modifier.align(Alignment.Center).padding(horizontal = if (pinned || focused) 16.dp else 11.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -208,7 +209,8 @@ private fun PinButton(pinned: Boolean, onClick: () -> Unit) {
                 tint = if (pinned && !focused) Palette.Accent else androidx.tv.material3.LocalContentColor.current,
                 modifier = Modifier.size(20.dp)
             )
-            Text(if (pinned) "Épinglée" else "Épingler", style = Type.Label)
+            // Icon only at rest; the label appears on focus or once pinned, so the list stays light.
+            if (pinned || focused) Text(if (pinned) "Épinglée" else "Épingler", style = Type.Label)
         }
     }
 }

@@ -5,6 +5,7 @@
 
     <application
         android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
         android:banner="@mipmap/banner"
         android:icon="@mipmap/ic_launcher"
         android:label="Channel Finder"

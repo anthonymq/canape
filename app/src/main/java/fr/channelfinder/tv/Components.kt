@@ -17,6 +17,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -113,6 +117,16 @@ fun FocusSurface(
     interactionSource: MutableInteractionSource? = null,
     body: @Composable BoxScope.() -> Unit
 ) {
+    if (onLongClick == null) {
+        PlainSurface(
+            onClick = onClick, modifier = modifier, shape = shape, enabled = enabled,
+            container = container, focusedContainer = Palette.FocusFill,
+            content = content, focusedContent = Palette.OnFocus,
+            border = outline?.let { BorderStroke(1.5.dp, it) }, focusedBorder = null,
+            focusedScale = focusedScale, interactionSource = interactionSource, body = body
+        )
+        return
+    }
     Surface(
         onClick = onClick,
         onLongClick = onLongClick,
@@ -140,6 +154,69 @@ fun FocusSurface(
 }
 
 /**
+ * Same look as the TV Material surfaces, built on foundation `clickable` (which handles OK/Enter).
+ * Used when there is no long press: TV Material always advertises a long-press action to
+ * accessibility services, even without a handler.
+ */
+@Composable
+private fun PlainSurface(
+    onClick: () -> Unit,
+    modifier: Modifier,
+    shape: Shape,
+    enabled: Boolean,
+    container: Color,
+    focusedContainer: Color,
+    content: Color,
+    focusedContent: Color,
+    border: BorderStroke?,
+    focusedBorder: BorderStroke?,
+    focusedScale: Float,
+    interactionSource: MutableInteractionSource?,
+    body: @Composable BoxScope.() -> Unit
+) {
+    val source = interactionSource ?: remember { MutableInteractionSource() }
+    val focused by source.collectIsFocusedAsState()
+    val pressed by source.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        if (focused && !pressed) focusedScale else 1f, tween(150), label = "scale"
+    )
+    val activeBorder = if (focused) focusedBorder ?: border else border
+    Box(
+        modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .then(
+                if (focused) Modifier.shadow(14.dp, shape, ambientColor = Palette.Accent, spotColor = Palette.Accent)
+                else Modifier
+            )
+            .clip(shape)
+            .background(
+                when {
+                    !enabled -> container.copy(alpha = 0.5f)
+                    focused && pressed -> Palette.Muted
+                    focused -> focusedContainer
+                    else -> container
+                }
+            )
+            .then(if (activeBorder != null) Modifier.border(activeBorder, shape) else Modifier)
+            .clickable(
+                interactionSource = source,
+                indication = null,
+                enabled = enabled,
+                role = androidx.compose.ui.semantics.Role.Button,
+                onClick = onClick
+            )
+    ) {
+        androidx.compose.runtime.CompositionLocalProvider(
+            LocalContentColor provides when {
+                !enabled -> content.copy(alpha = 0.5f)
+                focused -> focusedContent
+                else -> content
+            }
+        ) { body() }
+    }
+}
+
+/**
  * Artwork tiles keep their own background when focused and gain a white outline instead,
  * following the TV focus system for cards.
  */
@@ -153,6 +230,16 @@ fun CardSurface(
     interactionSource: MutableInteractionSource? = null,
     body: @Composable BoxScope.() -> Unit
 ) {
+    if (onLongClick == null) {
+        PlainSurface(
+            onClick = onClick, modifier = modifier, shape = shape, enabled = true,
+            container = container, focusedContainer = container,
+            content = Palette.OnSurface, focusedContent = Palette.OnSurface,
+            border = BorderStroke(1.dp, Palette.Outline), focusedBorder = BorderStroke(3.dp, Palette.FocusFill),
+            focusedScale = 1.05f, interactionSource = interactionSource, body = body
+        )
+        return
+    }
     Surface(
         onClick = onClick,
         onLongClick = onLongClick,
@@ -308,11 +395,25 @@ fun TvTextField(
         runCatching { outerFocusRequester.requestFocus() }
     }
 
+    // Back ends editing first (the keyboard, when open, closes itself before this).
+    androidx.activity.compose.BackHandler(enabled = editing) { stopEditing() }
+
+    val view = androidx.compose.ui.platform.LocalView.current
     LaunchedEffect(editing) {
         if (editing) {
             delay(30)
             runCatching { fieldFocus.requestFocus() }
             keyboard?.show()
+            // Back first closes the keyboard, and the keyboard swallows that Back. Treat the keyboard
+            // going away as the end of editing, so one Back is enough.
+            var seenKeyboard = false
+            while (true) {
+                delay(200)
+                val shown = androidx.core.view.ViewCompat.getRootWindowInsets(view)
+                    ?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime()) == true
+                if (shown) seenKeyboard = true
+                else if (seenKeyboard) { stopEditing(); break }
+            }
         }
     }
 
@@ -367,7 +468,7 @@ fun TvTextField(
                                     focusManager.moveFocus(if (event.key == Key.DirectionDown) FocusDirection.Down else FocusDirection.Up)
                                     true
                                 }
-                                Key.Back, Key.Escape -> { stopEditing(); true }
+                                Key.Escape -> { stopEditing(); true }
                                 else -> false
                             }
                         }
@@ -447,12 +548,14 @@ fun EmptyState(icon: ImageVector, title: String, message: String, modifier: Modi
 
 /** Short confirmation shown at the bottom of the screen, e.g. after a long press adds a favorite. */
 @Composable
-fun BoxScope.NoticeHost(notice: Notice?) {
+fun BoxScope.NoticeHost(notice: Notice?, atBottom: Boolean = false) {
+    // Bottom on Home (rows of cards fill the top while scrolled); top elsewhere, clear of list and buttons.
     AnimatedVisibility(
         visible = notice != null,
-        enter = fadeIn() + slideInVertically { -it / 2 },
-        exit = fadeOut() + slideOutVertically { -it / 2 },
-        modifier = Modifier.align(Alignment.TopCenter).padding(top = 20.dp)
+        enter = fadeIn() + slideInVertically { if (atBottom) it / 2 else -it / 2 },
+        exit = fadeOut() + slideOutVertically { if (atBottom) it / 2 else -it / 2 },
+        modifier = if (atBottom) Modifier.align(Alignment.BottomCenter).padding(bottom = 24.dp)
+        else Modifier.align(Alignment.TopCenter).padding(top = 20.dp)
     ) {
         val current = remember { mutableStateOf(notice) }
         if (notice != null) current.value = notice

@@ -25,11 +25,20 @@ object ChannelText {
         return code.takeIf { it.length == 2 && it in isoCountries && it !in notCountryCodes }
     }
 
+    // Usual short French names where the official one is too long for a chip.
+    private val shortCountryNames = mapOf(
+        "CF" to "Centrafrique", "CD" to "RD Congo", "CG" to "Congo", "US" to "États-Unis", "GB" to "Royaume-Uni",
+        "DO" to "Rép. dominicaine", "AE" to "Émirats", "BA" to "Bosnie", "CZ" to "Tchéquie", "KR" to "Corée du Sud",
+        "MK" to "Macédoine", "SA" to "Arabie saoudite", "TT" to "Trinité-et-Tobago", "ZA" to "Afrique du Sud"
+    )
+
+    fun countryName(code: String): String = shortCountryNames[code]
+        ?: java.util.Locale("", code).getDisplayCountry(java.util.Locale.FRENCH).replaceFirstChar { it.titlecase(java.util.Locale.FRENCH) }
+
     /** "🇧🇷 Brésil" for "BR". */
     fun countryLabel(code: String): String {
         val flag = code.uppercase().map { Character.toChars(0x1F1E6 + (it - 'A')).concatToString() }.joinToString("")
-        val name = java.util.Locale("", code).getDisplayCountry(java.util.Locale.FRENCH).replaceFirstChar { it.titlecase(java.util.Locale.FRENCH) }
-        return "$flag $name"
+        return "$flag ${countryName(code)}"
     }
 
     /** Best quality named in the channel name, else in its category ("FRANCE • UHD/4K", "FRANCE • SD"). */
@@ -60,6 +69,9 @@ object ChannelText {
             if (code !in notCountries && match.range.last + 1 < text.length) {
                 country = code
                 text = text.substring(match.range.last + 1)
+                // Some groups repeat the code: "FR ‖ FR • ACTEURS FILMS" -> "ACTEURS FILMS".
+                countryPrefix.find(text)?.takeIf { it.groupValues[1] == code && it.range.last + 1 < text.length }
+                    ?.let { again -> text = text.substring(again.range.last + 1) }
             }
         }
         val badges = LinkedHashSet<String>()

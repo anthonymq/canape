@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -133,6 +134,11 @@ fun HomeScreen(state: AppState) {
         item(key = "lanes") {
             HomeRow(title = null) {
                 val (liveEvents, soonEvents) = remember(state.channels) { state.upcomingEventCount() }
+                // Counts match what the lane shows once opened, including the saved quality filter.
+                val quality = state.qualityFilter
+                val qualityCounts = remember(state.channels, quality) {
+                    if (quality == null) null else state.channels.filter { it.quality == quality }.groupingBy { it.lane }.eachCount()
+                }
                 laneStyles.forEach { style ->
                     LaneCard(
                         style = style,
@@ -142,6 +148,8 @@ fun HomeScreen(state: AppState) {
                                 soonEvents > 0 -> "$soonEvents à venir"
                                 else -> "Voir les matchs"
                             }
+                        } else if (qualityCounts != null && quality != null) {
+                            "${number.format(qualityCounts[style.lane.label] ?: 0)} en ${quality.label}"
                         } else "${number.format(state.laneCounts[style.lane.label] ?: 0)} chaînes",
                         modifier = Modifier.homeFocus("lane:${style.lane.name}")
                     ) { state.navigate(Page.Browse(style.lane)) }
@@ -195,7 +203,7 @@ fun HomeScreen(state: AppState) {
         }
 
         item(key = "pinned") {
-            HomeRow(title = "Catégories épinglées", subtitle = if (pinned.isEmpty()) null else "${state.categories.size} catégories disponibles") {
+            HomeRow(title = "Catégories épinglées", subtitle = if (pinned.isEmpty()) null else "Appui long sur OK pour retirer") {
                 pinned.forEach { category ->
                     CategoryCard(
                         category, number.format(state.categoryCounts[category.id] ?: 0),
@@ -264,6 +272,7 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
             Text(
                 style.emoji, fontSize = 72.sp,
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 18.dp).rotate(-12f).alpha(0.28f)
+                    .clearAndSetSemantics { } // decorative: screen readers announce the emoji once
             )
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).align(Alignment.TopStart)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -344,14 +353,14 @@ private fun CategoryCard(category: ChannelCategory, count: String, modifier: Mod
 private fun AddCategoryCard(modifier: Modifier, onClick: () -> Unit) {
     FocusSurface(onClick = onClick, modifier = modifier.size(width = 212.dp, height = 72.dp), container = Palette.Ink, outline = Palette.Outline) {
         Row(
-            Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(Icons.Rounded.PushPin, contentDescription = null, modifier = Modifier.size(24.dp))
+            Icon(Icons.Rounded.PushPin, contentDescription = null, modifier = Modifier.size(22.dp))
             Column {
-                Text("Épingler une catégorie", style = Type.Label)
-                Text("Pour l’ouvrir d’ici", style = Type.Caption, color = secondaryColor())
+                Text("Épingler", style = Type.Label, maxLines = 1)
+                Text("Une catégorie ici", style = Type.Caption, color = secondaryColor(), maxLines = 1)
             }
         }
     }

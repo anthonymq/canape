@@ -66,6 +66,8 @@ Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LE
 
 - UI text is French; keep new strings in French and consistent with existing wording.
 - Design for a TV at sofa distance and follow the Android TV design guidelines: D-pad focus must always be visible, reachable, and predictable; text must be high-contrast, at least 14 sp for running text and 12 sp for badges/eyebrows (the user asked for a denser UI on 2026-10-11, so keep rows around 56 dp rather than growing them back); keep the 58 dp side / 28 dp top-bottom margins; no on-screen back buttons; secondary actions use a long press on OK.
+- `FocusSurface`/`CardSurface` fall back to a foundation-`clickable` surface when there is no long press, because TV Material's `Surface` always reports a long-press action to accessibility services. Only pass `onLongClick` when the element really has one.
+- Text fields: one Back closes the keyboard and ends editing (`TvTextField` watches the IME insets). In the browser the search field is three Ups from the list (list → quality/country row → lane chips → search).
 - Never show the Xtream username or password on screen outside the account form.
 - The Google TV emulator sometimes shows a "Set up Google TV" prompt over the app; relaunch with `adb shell am start -n fr.channelfinder.tv/.MainActivity`.
 - Preview stays muted and starts only after focus settles (650 ms). Release players when leaving composition.

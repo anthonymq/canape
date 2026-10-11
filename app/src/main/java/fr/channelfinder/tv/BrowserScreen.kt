@@ -88,10 +88,13 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val qualityApplies = page.categoryId != null || page.lane !in qualityExemptLanes
     val quality = if (qualityApplies) state.qualityFilter else null
     // Country filter: offered when the list mixes at least two countries with two channels or more each.
+    // A country gets a chip only with a real share of the list (5%, at least 2 channels), so a few
+    // stray channels do not add chips that overflow the row.
     val countries = remember(base) {
+        val minimum = maxOf(2, base.size / 20)
         base.groupingBy { it.country }.eachCount()
-            .filter { (code, count) -> code != null && count >= 2 }
-            .entries.sortedByDescending { it.value }.take(8).map { it.key!! }
+            .filter { (code, count) -> code != null && count >= minimum }
+            .entries.sortedByDescending { it.value }.take(6).map { it.key!! }
             .takeIf { it.size >= 2 }.orEmpty()
     }
     val country = page.country?.takeIf { it in countries }
@@ -150,7 +153,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
         quality != null || country != null -> listOfNotNull(
             "${number.format(results.size)} chaîne${plural(results.size)}",
             quality?.let { "en ${it.label}" },
-            country?.let { ChannelText.countryLabel(it).substringAfter(' ') }
+            country?.let(ChannelText::countryName)
         ).joinToString(" · ").replace(" · en ", " en ")
         else -> "${number.format(results.size)} chaîne${plural(results.size)}"
     }
@@ -248,10 +251,12 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(vertical = 6.dp, horizontal = 10.dp)
                 ) {
-                    itemsIndexed(results, key = { _, channel -> channel.id }) { _, channel ->
+                    itemsIndexed(results, key = { _, channel -> channel.id }) { index, channel ->
                         val isSelected = channel.id == selected?.id
                         ChannelRow(
                             channel = channel,
+                            // The group name only where it changes; the preview always shows it.
+                            showCategory = index == 0 || results[index - 1].categoryDisplay != channel.categoryDisplay,
                             isFavorite = channel.id in state.favorites,
                             isUnavailable = state.isUnavailable(channel.id),
                             isPreviewing = isSelected && !listHasFocus,
@@ -321,6 +326,7 @@ private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: Channe
 @Composable
 private fun ChannelRow(
     channel: Channel,
+    showCategory: Boolean,
     isFavorite: Boolean,
     isUnavailable: Boolean,
     isPreviewing: Boolean,
@@ -354,7 +360,9 @@ private fun ChannelRow(
                     EventTag(channel)
                     if (channel.event == null) channel.countryTag?.let { Badge(it) }
                     if (channel.event == null) channel.badges.take(2).forEach { Badge(it) }
-                    Text(channel.categoryDisplay, style = Type.Caption, color = secondaryColor(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (showCategory || channel.event != null) {
+                        Text(channel.categoryDisplay, style = Type.Caption, color = secondaryColor(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
             }
             if (isFavorite) Icon(Icons.Rounded.Star, contentDescription = "Favori", tint = if (focused) Palette.GoldOnLight else Palette.Gold, modifier = Modifier.size(24.dp))
@@ -375,19 +383,27 @@ private fun PreviewPane(
     val context = LocalContext.current
     val account = state.account ?: return
     val player = remember { buildStreamPlayer(context) }
-    var previewState by remember { mutableStateOf(PreviewState.WAITING) }
+    var reportedState by remember { mutableStateOf(PreviewState.WAITING) }
+    var reportedFor by remember { mutableStateOf<String?>(null) }
+    // A state reported for the previous channel never shows on the new one ("EN DIRECT" over a loading logo).
+    val previewState = if (reportedFor == channel.id) reportedState else PreviewState.WAITING
     var errorText by remember { mutableStateOf("") }
     // Many provider failures (HTTP 407, timeouts) are intermittent: retry twice before calling it unavailable.
     var retry by remember { mutableIntStateOf(0) }
     LaunchedEffect(channel.id) { retry = 0 }
     val currentChannel by rememberUpdatedState(channel)
 
+    fun report(newState: PreviewState) {
+        reportedState = newState
+        reportedFor = currentChannel.id
+    }
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_READY -> { previewState = PreviewState.READY; state.markWorking(currentChannel.id) }
-                    Player.STATE_BUFFERING -> if (previewState != PreviewState.READY) previewState = PreviewState.BUFFERING
+                    Player.STATE_READY -> { report(PreviewState.READY); state.markWorking(currentChannel.id) }
+                    Player.STATE_BUFFERING -> if (previewState != PreviewState.READY) report(PreviewState.BUFFERING)
                     else -> Unit
                 }
             }
@@ -398,7 +414,7 @@ private fun PreviewPane(
                     return
                 }
                 errorText = playbackErrorMessage(error)
-                previewState = PreviewState.ERROR
+                report(PreviewState.ERROR)
                 state.markUnavailable(currentChannel.id)
             }
         }
@@ -411,14 +427,14 @@ private fun PreviewPane(
 
     // Start the stream only once focus settles, so fast D-pad movement does not open a stream per row.
     LaunchedEffect(channel.id, account, retry) {
-        if (retry == 0) previewState = PreviewState.WAITING
+        if (retry == 0) report(PreviewState.WAITING)
         player.playWhenReady = false
         player.stop()
         player.clearMediaItems()
         delay(if (retry == 0) 650L else 1_500L * retry)
         player.setMediaItem(MediaItem.fromUri(state.repository.streamUrl(account, channel)))
         player.volume = 0f
-        if (retry == 0) previewState = PreviewState.BUFFERING
+        if (retry == 0) report(PreviewState.BUFFERING)
         player.playWhenReady = true
         player.prepare()
     }

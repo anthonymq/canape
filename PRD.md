@@ -77,6 +77,8 @@ Quality is not applied in Événements, Favoris and Récents (events rarely carr
 
 A **Pays** filter sits in the same row whenever the list on screen (lane or category) mixes at least two countries with two or more channels each, for example Brésil/Portugal in Português or the countries of `LT | LATINO`. Countries come from the channel's prefix, else its category's, mapped to ISO codes (IND→IN, USA→US…); provider prefixes that are regions or languages (EU, LA, AS, AF, AR…) are never shown as countries and such channels only appear under **Tous**. The country choice belongs to the current list and resets when the lane or category changes.
 
+A country only gets a chip with at least 5% of the list (and two channels), so a handful of stray channels never overflows the row; long official names use short French forms (Centrafrique, États-Unis…). Rows show the group name only where it changes; the preview always shows it. Home lane counts follow the saved quality filter ("340 en Full HD").
+
 Search ranks matches (exact name, then name prefix, then word prefix, then anywhere), ignores accents, and requires every typed word to match. Channel names are cleaned for display only (`ChannelText.kt`): country prefixes such as `|FR|` become a badge and quality suffixes (HD, FHD, 4K, HEVC…) become badges. Raw names are still searched.
 
 When returning from full-screen playback, restore the selected channel and list position. While the stream buffers, show a clear progress message. If preview playback fails, explain that the viewer can still try full-screen playback. An empty search result should remove the preview and provide a clear empty state. The D-pad must be able to move from the search field into the results.

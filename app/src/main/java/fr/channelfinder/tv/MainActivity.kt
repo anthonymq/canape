@@ -85,6 +85,6 @@ private fun ChannelFinderApp(probe: String? = null) {
                 is Page.Player -> PlayerScreen(state, page)
             }
         }
-        NoticeHost(state.notice)
+        NoticeHost(state.notice, atBottom = state.page == Page.Home)
     }
 }
