@@ -35,9 +35,15 @@ data class Channel(
     private val label by lazy { ChannelText.parseLabel(name) }
     private val categoryLabel get() = ChannelText.categoryLabel(category)
 
-    /** Provider name without the country prefix and quality suffixes, e.g. "|FR| TF1 HD" -> "TF1". */
-    val displayName: String get() = label.title
-    val categoryDisplay: String get() = categoryLabel.title
+    /** Set for match/event feeds, which only carry a picture during an event. */
+    val event: ChannelText.EventInfo? by lazy {
+        if (lane == BrowseLane.EVENTS.label || ChannelText.isEvent(category, name)) ChannelText.parseEvent(name, label.title) else null
+    }
+
+    /** Provider name without the country prefix and quality suffixes, e.g. "|FR| TF1 HD" -> "TF1"; the match for events. */
+    val displayName: String get() = event?.title ?: label.title
+    val categoryDisplay: String
+        get() = event?.let { info -> listOfNotNull(info.competition, info.feed).joinToString(" · ").ifBlank { null } } ?: categoryLabel.title
     val countryTag: String? get() = label.country ?: categoryLabel.country
     val badges: List<String> get() = label.badges
     val initials: String get() = ChannelText.initials(label.title)
@@ -47,7 +53,8 @@ data class Channel(
 }
 
 enum class BrowseLane(val label: String) {
-    FRANCE("France"), PORTUGUESE("Português"), SPORTS("Sports"), FAVORITES("Favoris"), RECENT("Récents"), ALL("Toutes")
+    FRANCE("France"), PORTUGUESE("Português"), SPORTS("Sports"), EVENTS("Événements"),
+    FAVORITES("Favoris"), RECENT("Récents"), ALL("Toutes")
 }
 
 sealed interface Page {

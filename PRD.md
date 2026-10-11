@@ -48,6 +48,19 @@ Home should answer “what can I watch quickly?” It is a vertical stack of row
 
 Pinned category shortcuts show their category label and channel count. Selecting a shortcut opens the category's channel list directly. Category favorites are stored locally by Xtream category ID, not by parsing the category label.
 
+### Événements (event feeds)
+
+Many provider channels only carry a picture during a match: event/PPV groups, numbered match feeds (CANAL+ LIVE 4, LIGUE1+ 3, LA LIGA 2…), and feeds renamed with the match and kickoff time ("DAZN FR 003| Rennes vs. AJ Auxerre | Ligue 1+ (2026-10-11 17:15:00)"). `ChannelText.isEvent` detects them from category/name wording only (no provider IDs). French and Portuguese-language events go to their own **Événements** lane (Home card + chip) and leave the France, Português, and Sports lanes; events for other audiences stay reachable from their category and search. The lane shows the match title, competition, and status (**EN COURS** for 3 h after kickoff, start time, "Pendant les matchs" for generic feeds, "Terminé"/"Aucun événement" last), and lists each match once even though the provider publishes most matches in a main and a backup group.
+
+### Unavailable channels
+
+Measured on 2026-10-11 with a debug probe (`StreamProbe.kt`): the account allows one connection (`max_connections=1`), yet nearly all failures are HTTP 407 answered by the provider per channel. Some channels always fail (all France 3 regional feeds of `FR ‖ FRANCE 3 • REGIONS`, Magnus TV, TVI FHD), others fail intermittently (RTP 1 alternated between OK and 407 with 15 s idle gaps). Results were identical with eight different User-Agents, and two concurrent streams usually worked, so the app is not the cause. The app therefore:
+
+- retries a failed stream twice (1.5 s, then 3 s) before showing an error, in the preview and full screen;
+- remembers failures for 12 hours (`AppState.unavailable`, persisted): such channels are dimmed, labelled **INDISPONIBLE**, sorted after working ones in lanes and search, and skipped when zapping; a later success clears the mark;
+- orders lanes general-interest first (keywords such as GENERAL/TNT, then info, regional/local/backup last), so France no longer opens on France 3 regional feeds;
+- explains a 407 as the provider refusing that channel and suggests another version of it.
+
 ### Category picker
 
 The picker searches category labels locally (accent-insensitive). Rows are grouped under **Épinglées sur l’accueil**, France, Português, Sports, and Autres. OK opens a category; Right then OK (or a long press) pins it. Sections are recomputed when the list opens or the query changes, so pinning never moves the focused row. Returning from a category restores focus on it.
@@ -73,7 +86,7 @@ Media3/ExoPlayer plays the selected live stream with sound; there is no seek bar
 | FR-1 | Load live categories and live streams through the Xtream player API. | Verified on emulator: 24,057 channels load. |
 | FR-2 | Keep channel ID, category ID, category label, logo URL, EPG ID, and derived lane with each channel. | Implemented. |
 | FR-3 | Search channel names, category labels, and lane labels locally. | Verified: "TF1" returns 36 ranked results, exact match first; D-pad leaves the field. |
-| FR-4 | Classify French, Portuguese, and sports channels into direct Home lanes. | Implemented with heuristics; Português includes non-Portuguese channels. |
+| FR-4 | Classify French, Portuguese, and sports channels into direct Home lanes. | Category country code wins over name words (2026-10-11): France 1,870, Português 769 (now includes `BR |` groups), Sports 2,997, Événements 423 after de-duplication. |
 | FR-5 | Pin/unpin categories and open them directly from Home. | Verified on emulator: pin from picker, card appears on Home. |
 | FR-6 | Pin/unpin channels and retain a recent-channel list. | Verified on emulator: long-press favorite, Home row, recents ordered by recency. |
 | FR-7 | Preview the selected live channel while browsing, muted by default and delayed until focus settles. | Verified on emulator: plays muted; failure state shown. |
@@ -120,7 +133,9 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 
 ## Known issues
 
-- **Lane classification:** `ChannelText.classifyLane` matches text loosely. Português includes channels such as "|ES| Trace Brasil". On 2026-10-11 the `‖` / `|PT|` / `|FR|` separators were added, so `PT ‖ …` categories (for example Vodafone) now reach Português (418 → 493 channels) and France grew from 2,064 to 2,124. The France lane still opens on France 3 regional channels, several of which fail on the provider side.
+- **Lane classification:** the category's country code now decides the lane when present; name keywords are only used for untagged categories. The Sports lane still mixes every country (2,997 channels).
+- **Provider-side dead channels:** many France/Português channels answer HTTP 407 (see [Unavailable channels](#unavailable-channels)). The app learns them as the viewer meets them; there is no background scan, to avoid extra provider connections on a one-connection account.
+- **Event times:** kickoff times in feed names are read in the TV's time zone; the provider's zone is not documented. Events are considered live for 3 hours after kickoff.
 - **Catalog cache read time:** reading ~24k channels from the binary cache takes about 3 s on the emulator with a debug build. Measure on the target TV with a release build before optimizing further.
 - **Logos depend on the provider:** many `stream_icon` URLs are empty or fail; rows fall back to initials.
 - **Display-name cleanup is heuristic:** only known country-code prefixes and quality tokens are stripped. Raw names are still searched.
@@ -145,7 +160,8 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 | `Theme.kt` / `Components.kt` | Design tokens (palette, spacing, type) and shared TV components: focus surfaces, buttons, chips, logos, text field, hints, notices. |
 | `HomeScreen.kt`, `BrowserScreen.kt`, `CategoryScreen.kt`, `PlayerScreen.kt`, `StartupScreens.kt` | Screens (setup, loading, error and settings live in `StartupScreens.kt`). |
 | `Playback.kt` | `buildStreamPlayer`, the non-focusable video surface, and plain-language playback errors. |
-| `ChannelText.kt` | Display-name cleanup, badges, lane classification, accent-insensitive ranked search. |
+| `ChannelText.kt` | Display-name cleanup, badges, lane classification, event detection/parsing, lane ordering, accent-insensitive ranked search. |
+| `StreamProbe.kt` | Debug-build stream diagnostics (logs channel names and status codes only). |
 | `CatalogCache.kt` | Binary on-device catalog cache (metadata only, account identified by hash). |
 | `XtreamRepository.kt` | Xtream category/channel requests, load steps, error translation, live stream URL creation. |
 | `Channel.kt` | Account, category, channel, lane, and page models. |

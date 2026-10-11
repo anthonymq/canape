@@ -33,6 +33,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +58,7 @@ import androidx.media3.common.Player
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -73,7 +76,9 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     var firstFrame by remember { mutableStateOf(false) }
     var buffering by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf("") }
-    var retried by remember { mutableStateOf(false) }
+    var autoRetries by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val currentId by rememberUpdatedState(page.channelId)
     var attempt by remember { mutableIntStateOf(0) }
     var bannerVisible by remember { mutableStateOf(true) }
     var bannerTick by remember { mutableIntStateOf(0) }
@@ -87,6 +92,16 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     fun showBanner() { bannerVisible = true; bannerTick++ }
     fun zap(step: Int) {
         if (playlist.size < 2) { showBanner(); return }
+        // Skip channels that just failed, unless every channel in the list did.
+        var index = pendingIndex
+        repeat(playlist.size) {
+            index = (index + step + playlist.size) % playlist.size
+            if (!state.isUnavailable(playlist[index])) {
+                pendingIndex = index
+                showBanner()
+                return
+            }
+        }
         pendingIndex = (pendingIndex + step + playlist.size) % playlist.size
         showBanner()
     }
@@ -95,7 +110,10 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 buffering = playbackState == Player.STATE_BUFFERING
-                if (playbackState == Player.STATE_READY) status = PlayStatus.PLAYING
+                if (playbackState == Player.STATE_READY) {
+                    status = PlayStatus.PLAYING
+                    state.markWorking(currentId)
+                }
             }
 
             override fun onRenderedFirstFrame() { firstFrame = true }
@@ -106,14 +124,16 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
                     player.prepare()
                     return
                 }
-                // Live streams often drop once; retry silently before bothering the viewer.
-                if (!retried) {
-                    retried = true
-                    player.prepare()
+                // Provider failures are often intermittent: retry twice, a little later each time, before bothering the viewer.
+                if (autoRetries < 2) {
+                    autoRetries++
+                    val wait = 1_500L * autoRetries
+                    scope.launch { delay(wait); player.prepare() }
                     return
                 }
                 errorText = playbackErrorMessage(error)
                 status = PlayStatus.ERROR
+                state.markUnavailable(currentId)
             }
         }
         player.addListener(listener)
@@ -126,7 +146,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     LaunchedEffect(page.channelId, attempt) {
         status = PlayStatus.LOADING
         firstFrame = false
-        retried = false
+        autoRetries = 0
         val channel = state.channelsById[page.channelId] ?: return@LaunchedEffect
         player.setMediaItem(MediaItem.fromUri(state.repository.streamUrl(account, channel)))
         player.volume = 1f
@@ -250,6 +270,7 @@ private fun ChannelBanner(channel: Channel, position: String, isFavorite: Boolea
                         Box(Modifier.size(7.dp).background(Color.White, CircleShape))
                         Text("EN DIRECT", style = Type.Badge, color = Color.White)
                     }
+                    EventTag(channel)
                     Text(position, style = Type.Label, color = Palette.Muted)
                     if (isFavorite) Icon(Icons.Rounded.Star, contentDescription = "Favori", tint = Palette.Gold, modifier = Modifier.size(20.dp))
                 }

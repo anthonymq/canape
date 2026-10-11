@@ -40,15 +40,22 @@ fun videoSurface(context: Context): PlayerView = PlayerView(context).apply {
     descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
 }
 
+private const val PROVIDER_REFUSED =
+    "Le fournisseur refuse cette chaîne en ce moment (erreur 407). Essayez une autre version de la chaîne ou réessayez plus tard."
+
 /** Plain-language reason a stream failed. Never includes the URL, which embeds credentials. */
 fun playbackErrorMessage(error: PlaybackException): String {
     var cause: Throwable? = error
-    while (cause != null && cause !is HttpDataSource.InvalidResponseCodeException) cause = cause.cause
+    while (cause != null && cause !is HttpDataSource.InvalidResponseCodeException) {
+        // HttpURLConnection reports a 407 from the stream server as a ProtocolException, not a status code.
+        if (cause is java.net.ProtocolException && cause.message.orEmpty().contains("407")) return PROVIDER_REFUSED
+        cause = cause.cause
+    }
     if (cause is HttpDataSource.InvalidResponseCodeException) {
         return when (val code = cause.responseCode) {
             401, 403 -> "Le fournisseur refuse l’accès à cette chaîne (erreur $code)."
             404, 410 -> "Cette chaîne n’est plus proposée par le fournisseur."
-            407 -> "Le fournisseur bloque cette chaîne pour le moment (erreur 407)."
+            407 -> PROVIDER_REFUSED
             429, 458, 509 -> "Trop d’appareils regardent en même temps sur ce compte. Arrêtez la lecture ailleurs, puis réessayez."
             in 500..599 -> "Le serveur de la chaîne rencontre un problème (erreur $code)."
             else -> "Le fournisseur a refusé la lecture (erreur $code)."

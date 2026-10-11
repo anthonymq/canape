@@ -66,7 +66,8 @@ private data class LaneStyle(val lane: BrowseLane, val emoji: String, val subtit
 private val laneStyles = listOf(
     LaneStyle(BrowseLane.FRANCE, "🇫🇷", "Chaînes françaises", listOf(Color(0xFF27448F), Color(0xFF162550))),
     LaneStyle(BrowseLane.PORTUGUESE, "🇵🇹", "Portugal et Brésil", listOf(Color(0xFF1C6B45), Color(0xFF0F3527))),
-    LaneStyle(BrowseLane.SPORTS, "⚽", "Toutes les chaînes sport", listOf(Color(0xFF8A4A16), Color(0xFF45240D)))
+    LaneStyle(BrowseLane.SPORTS, "⚽", "Chaînes sport", listOf(Color(0xFF8A4A16), Color(0xFF45240D))),
+    LaneStyle(BrowseLane.EVENTS, "🏟️", "Matchs et directs", listOf(Color(0xFF6A2A6E), Color(0xFF2E1533)))
 )
 
 @Composable
@@ -131,10 +132,17 @@ fun HomeScreen(state: AppState) {
 
         item(key = "lanes") {
             HomeRow(title = null) {
+                val (liveEvents, soonEvents) = remember(state.channels) { state.upcomingEventCount() }
                 laneStyles.forEach { style ->
                     LaneCard(
                         style = style,
-                        count = number.format(state.laneCounts[style.lane.label] ?: 0),
+                        count = if (style.lane == BrowseLane.EVENTS) {
+                            when {
+                                liveEvents > 0 -> "$liveEvents en cours"
+                                soonEvents > 0 -> "$soonEvents à venir"
+                                else -> "Voir les matchs"
+                            }
+                        } else "${number.format(state.laneCounts[style.lane.label] ?: 0)} chaînes",
                         modifier = Modifier.homeFocus("lane:${style.lane.name}")
                     ) { state.navigate(Page.Browse(style.lane)) }
                 }
@@ -251,24 +259,24 @@ private fun HomeRow(
 
 @Composable
 private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClick: () -> Unit) {
-    CardSurface(onClick = onClick, modifier = modifier.size(width = 268.dp, height = 150.dp), container = style.colors.last()) {
+    CardSurface(onClick = onClick, modifier = modifier.size(width = 196.dp, height = 150.dp), container = style.colors.last()) {
         Box(Modifier.fillMaxSize().background(Brush.linearGradient(style.colors))) {
             Text(
                 style.emoji, fontSize = 92.sp,
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 18.dp, y = 22.dp).rotate(-12f).alpha(0.28f)
             )
             Column(Modifier.padding(20.dp).align(Alignment.TopStart)) {
-                Text(style.emoji, fontSize = 30.sp)
-                Spacer(Modifier.height(10.dp))
+                Text(style.emoji, fontSize = 26.sp)
+                Spacer(Modifier.height(6.dp))
                 Text(style.lane.label, style = Type.Headline, color = Color.White)
-                Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f))
+                Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f), maxLines = 1)
             }
             Row(
                 Modifier.align(Alignment.BottomStart).padding(start = 20.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text("$count chaînes", style = Type.Label, color = Color.White)
+                Text(count, style = Type.Label, color = Color.White)
                 Icon(Icons.Rounded.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
         }

@@ -471,3 +471,29 @@ fun BoxScope.NoticeHost(notice: Notice?) {
 
 data class Notice(val text: String, val icon: ImageVector? = null, val tint: Color? = null, val id: Long = System.nanoTime())
 
+
+/** Status of an event feed: live now, start time, generic match feed, or nothing scheduled. */
+@Composable
+fun EventTag(channel: Channel, modifier: Modifier = Modifier) {
+    val info = channel.event ?: return
+    val status = info.status()
+    val label = ChannelText.eventTimeLabel(info).uppercase()
+    when (status) {
+        ChannelText.EventStatus.LIVE -> Row(
+            modifier.background(Palette.Live, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Box(Modifier.size(6.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))
+            Text(label, style = Type.Badge, color = androidx.compose.ui.graphics.Color.White)
+        }
+        ChannelText.EventStatus.UPCOMING -> Badge(label, modifier, tone = Palette.Accent)
+        else -> Badge(label, modifier, tone = secondaryColor())
+    }
+}
+
+/** Shown on channels whose stream failed in the last hours. */
+@Composable
+fun UnavailableTag(modifier: Modifier = Modifier) {
+    Badge("INDISPONIBLE", modifier, tone = Palette.Error)
+}

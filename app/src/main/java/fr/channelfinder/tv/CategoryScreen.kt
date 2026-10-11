@@ -49,7 +49,7 @@ private sealed interface CategoryItem {
     data class Row(val category: ChannelCategory) : CategoryItem { override val key = category.id }
 }
 
-private val sectionOrder = listOf(BrowseLane.FRANCE.label, BrowseLane.PORTUGUESE.label, BrowseLane.SPORTS.label, "Autres")
+private val sectionOrder = listOf(BrowseLane.FRANCE.label, BrowseLane.PORTUGUESE.label, BrowseLane.SPORTS.label, BrowseLane.EVENTS.label, "Autres")
 
 @Composable
 fun CategoryPickerScreen(state: AppState, page: Page.CategoryPicker) {

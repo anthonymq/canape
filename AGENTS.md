@@ -54,7 +54,8 @@ Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LE
 - `Theme.kt`, `Components.kt`: design tokens and shared TV components. Use `FocusSurface` (light fill on focus) for rows/buttons/chips, `CardSurface` (white outline) for artwork cards, and `TvTextField` for any text input (it never opens the keyboard on focus).
 - `HomeScreen.kt`, `BrowserScreen.kt`, `CategoryScreen.kt`, `PlayerScreen.kt`, `StartupScreens.kt` (setup, loading, error, settings).
 - `Playback.kt`: `buildStreamPlayer`, video surface, plain-language playback errors.
-- `ChannelText.kt`: display-name cleanup, badges, lane classification, ranked accent-insensitive search.
+- `ChannelText.kt`: display-name cleanup, badges, lane classification, event detection and parsing, lane ordering, ranked accent-insensitive search. `CatalogCache` stores lanes: bump its `VERSION` whenever lane rules change.
+- `StreamProbe.kt`: debug builds only. `adb shell am start -S -n fr.channelfinder.tv/.MainActivity -e probe 30` checks streams in the France and Português lanes one at a time; read `adb logcat -s StreamProbe` (names and status codes only, never URLs).
 - `CatalogCache.kt`: binary on-device catalog cache (metadata only).
 - `XtreamRepository.kt`: Xtream API calls, error translation, stream URL building.
 - `Channel.kt`: models, `Page`, `BrowseLane`.
@@ -68,6 +69,7 @@ Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LE
 - Never show the Xtream username or password on screen outside the account form.
 - The Google TV emulator sometimes shows a "Set up Google TV" prompt over the app; relaunch with `adb shell am start -n fr.channelfinder.tv/.MainActivity`.
 - Preview stays muted and starts only after focus settles (650 ms). Release players when leaving composition.
-- Some channels fail on the provider side (for example HTTP 407 on France 3 regional streams). Verify playback with a known-good channel (search "TF1") before blaming the app.
+- Many channels fail on the provider side with HTTP 407, some always and some intermittently (see PRD "Unavailable channels"). Verify playback with a known-good channel (search "TF1") or the stream probe before blaming the app.
+- When driving the emulator, never press Back on Home with France focused: it leaves the app, and the Google TV setup/sign-in screens take the next keystrokes. Check `dumpsys activity activities | grep topResumed` before typing.
 - After any change, build, reinstall on the emulator, and check the affected screen with screenshots before reporting it done.
 - Update the status tables and known issues in `PRD.md` when you verify or fix something.

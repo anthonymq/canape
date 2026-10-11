@@ -38,7 +38,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,7 +71,7 @@ import java.util.Locale
 private enum class PreviewState { WAITING, BUFFERING, READY, ERROR }
 
 private val browseLanes = listOf(
-    BrowseLane.FRANCE, BrowseLane.PORTUGUESE, BrowseLane.SPORTS, BrowseLane.FAVORITES, BrowseLane.RECENT, BrowseLane.ALL
+    BrowseLane.FRANCE, BrowseLane.PORTUGUESE, BrowseLane.SPORTS, BrowseLane.EVENTS, BrowseLane.FAVORITES, BrowseLane.RECENT, BrowseLane.ALL
 )
 
 @Composable
@@ -181,6 +183,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                         ChannelRow(
                             channel = channel,
                             isFavorite = channel.id in state.favorites,
+                            isUnavailable = state.isUnavailable(channel.id),
                             isPreviewing = isSelected && !listHasFocus,
                             // Right always lands on "Regarder", never on the search field above it.
                             modifier = (if (isSelected) Modifier.focusRequester(selectedRowFocus) else Modifier)
@@ -231,6 +234,9 @@ private fun BrowseEmptyState(page: Page.Browse, state: AppState) {
         page.lane == BrowseLane.RECENT -> EmptyState(
             Icons.Rounded.History, "Aucune chaîne récente", "Les chaînes que vous regardez apparaîtront ici."
         )
+        page.lane == BrowseLane.EVENTS -> EmptyState(
+            Icons.Rounded.SearchOff, "Aucun événement", "Les matchs et directs ponctuels apparaîtront ici quand le fournisseur les annonce."
+        )
         else -> EmptyState(Icons.Rounded.SearchOff, "Aucune chaîne dans cette sélection", "Choisissez une autre catégorie.")
     }
 }
@@ -239,6 +245,7 @@ private fun BrowseEmptyState(page: Page.Browse, state: AppState) {
 private fun ChannelRow(
     channel: Channel,
     isFavorite: Boolean,
+    isUnavailable: Boolean,
     isPreviewing: Boolean,
     modifier: Modifier,
     onFocus: () -> Unit,
@@ -261,12 +268,15 @@ private fun ChannelRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            ChannelLogo(channel, Modifier.size(width = 72.dp, height = 46.dp), corner = 8.dp)
-            Column(Modifier.weight(1f)) {
+            // Recently failed channels stay listed but recede, so working ones stand out.
+            ChannelLogo(channel, Modifier.size(width = 72.dp, height = 46.dp).alpha(if (isUnavailable && !focused) 0.45f else 1f), corner = 8.dp)
+            Column(Modifier.weight(1f).alpha(if (isUnavailable && !focused) 0.6f else 1f)) {
                 Text(channel.displayName, style = Type.TitleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    channel.countryTag?.let { Badge(it) }
-                    channel.badges.take(2).forEach { Badge(it) }
+                    if (isUnavailable) UnavailableTag()
+                    EventTag(channel)
+                    if (channel.event == null) channel.countryTag?.let { Badge(it) }
+                    if (channel.event == null) channel.badges.take(2).forEach { Badge(it) }
                     Text(channel.categoryDisplay, style = Type.Caption, color = secondaryColor(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
@@ -290,20 +300,29 @@ private fun PreviewPane(
     val player = remember { buildStreamPlayer(context) }
     var previewState by remember { mutableStateOf(PreviewState.WAITING) }
     var errorText by remember { mutableStateOf("") }
+    // Many provider failures (HTTP 407, timeouts) are intermittent: retry twice before calling it unavailable.
+    var retry by remember { mutableIntStateOf(0) }
+    LaunchedEffect(channel.id) { retry = 0 }
+    val currentChannel by rememberUpdatedState(channel)
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_READY -> previewState = PreviewState.READY
+                    Player.STATE_READY -> { previewState = PreviewState.READY; state.markWorking(currentChannel.id) }
                     Player.STATE_BUFFERING -> if (previewState != PreviewState.READY) previewState = PreviewState.BUFFERING
                     else -> Unit
                 }
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                if (retry < 2) {
+                    retry++
+                    return
+                }
                 errorText = playbackErrorMessage(error)
                 previewState = PreviewState.ERROR
+                state.markUnavailable(currentChannel.id)
             }
         }
         player.addListener(listener)
@@ -314,15 +333,15 @@ private fun PreviewPane(
     }
 
     // Start the stream only once focus settles, so fast D-pad movement does not open a stream per row.
-    LaunchedEffect(channel.id, account) {
-        previewState = PreviewState.WAITING
+    LaunchedEffect(channel.id, account, retry) {
+        if (retry == 0) previewState = PreviewState.WAITING
         player.playWhenReady = false
         player.stop()
         player.clearMediaItems()
-        delay(650)
+        delay(if (retry == 0) 650L else 1_500L * retry)
         player.setMediaItem(MediaItem.fromUri(state.repository.streamUrl(account, channel)))
         player.volume = 0f
-        previewState = PreviewState.BUFFERING
+        if (retry == 0) previewState = PreviewState.BUFFERING
         player.playWhenReady = true
         player.prepare()
     }
@@ -376,6 +395,8 @@ private fun PreviewPane(
         Text(channel.displayName, style = Type.Title, color = Palette.OnSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (state.isUnavailable(channel.id)) UnavailableTag()
+            EventTag(channel)
             channel.countryTag?.let { Badge(it, tone = Palette.Muted) }
             channel.badges.forEach { Badge(it, tone = Palette.Muted) }
             if (channel.epgId.isNotBlank()) Badge("GUIDE", tone = Palette.Muted)

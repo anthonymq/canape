@@ -11,7 +11,7 @@ import java.security.MessageDigest
 
 private const val TAG = "CatalogCache"
 private const val MAGIC = 0x43465443 // "CFTC"
-private const val VERSION = 2
+private const val VERSION = 3 // bump when lane rules change: lanes are stored
 
 /**
  * Last successful catalog on internal storage, so Home opens instantly and refreshes in the background.

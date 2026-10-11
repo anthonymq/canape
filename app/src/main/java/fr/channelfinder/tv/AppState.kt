@@ -9,6 +9,7 @@ import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private const val UNAVAILABLE_FOR_MS = 12 * 60 * 60 * 1000L
 
 /** App-wide state: catalog, back stack, favorites, recents and per-screen positions. */
 class AppState(context: Context, private val scope: CoroutineScope) {
@@ -58,6 +61,9 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     val pinnedCategories = mutableStateListOf<String>()
     val recent = mutableStateListOf<String>()
 
+    /** Channels whose stream failed recently (id -> time). They sink to the end of lists and are skipped when zapping. */
+    val unavailable = mutableStateMapOf<String, Long>()
+
     var selectedChannelId by mutableStateOf<String?>(null)
     var browserListState by mutableStateOf(LazyListState())
         private set
@@ -77,6 +83,30 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         if (orderedPins != null) pinnedCategories += orderedPins.split('|').filter(String::isNotBlank)
         else pinnedCategories += prefs.getStringSet("favorite_categories", emptySet()).orEmpty()
         recent += prefs.getString("recent", "").orEmpty().split('|').filter(String::isNotBlank)
+        val cutoff = System.currentTimeMillis() - UNAVAILABLE_FOR_MS
+        prefs.getString("unavailable", "").orEmpty().split('|').forEach { entry ->
+            val id = entry.substringBefore(':')
+            val time = entry.substringAfter(':', "").toLongOrNull() ?: return@forEach
+            if (id.isNotBlank() && time > cutoff) unavailable[id] = time
+        }
+    }
+
+    fun isUnavailable(channelId: String): Boolean =
+        unavailable[channelId]?.let { System.currentTimeMillis() - it < UNAVAILABLE_FOR_MS } == true
+
+    /** Called once retries are exhausted, from the preview or full screen. */
+    fun markUnavailable(channelId: String) {
+        unavailable[channelId] = System.currentTimeMillis()
+        persistHealth()
+    }
+
+    fun markWorking(channelId: String) {
+        if (unavailable.remove(channelId) != null) persistHealth()
+    }
+
+    private fun persistHealth() {
+        val entries = unavailable.entries.sortedByDescending { it.value }.take(2000)
+        prefs.edit().putString("unavailable", entries.joinToString("|") { "${it.key}:${it.value}" }).apply()
     }
 
     // region Navigation
@@ -219,19 +249,62 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     // endregion
 
     // region Channels
-    fun channelsFor(lane: BrowseLane, categoryId: String?): List<Channel> = when {
-        categoryId != null -> channels.filter { it.categoryId == categoryId }
-        lane == BrowseLane.FAVORITES -> favorites.mapNotNull(channelsById::get)
-        lane == BrowseLane.RECENT -> recent.mapNotNull(channelsById::get)
-        lane == BrowseLane.ALL -> channels
-        else -> channels.filter { it.lane == lane.label }
+    fun channelsFor(lane: BrowseLane, categoryId: String?): List<Channel> {
+        val list = when {
+            categoryId != null -> channels.filter { it.categoryId == categoryId }
+            lane == BrowseLane.FAVORITES -> return favorites.mapNotNull(channelsById::get)
+            lane == BrowseLane.RECENT -> return recent.mapNotNull(channelsById::get)
+            lane == BrowseLane.ALL -> channels
+            lane == BrowseLane.EVENTS -> return eventsInOrder(channels.filter { it.lane == lane.label })
+                // Providers publish most matches twice (main and backup group): list each match once,
+                // keeping a copy that has not failed. Both stay reachable from their category.
+                .distinctBy { channel -> channel.event?.takeIf { it.start != null }?.let { "${it.title}|${it.start}" } ?: channel.id }
+            else -> channels.filter { it.lane == lane.label }.sortedBy { ChannelText.categoryRank(it.category) }
+        }
+        // Channels that just failed go last; the provider order is kept otherwise (sort is stable).
+        return list.sortedBy { if (isUnavailable(it.id)) 1 else 0 }
+    }
+
+    /** Live now, then upcoming by start time, then generic match feeds, then finished or idle feeds. */
+    private fun eventsInOrder(events: List<Channel>): List<Channel> {
+        val now = System.currentTimeMillis()
+        return events.sortedWith(
+            compareBy<Channel> {
+                when (it.event?.status(now)) {
+                    ChannelText.EventStatus.LIVE -> 0
+                    ChannelText.EventStatus.UPCOMING -> 1
+                    ChannelText.EventStatus.FEED -> 2
+                    else -> 3
+                } + if (isUnavailable(it.id)) 1 else 0
+            }.thenBy { channel ->
+                val start = channel.event?.start ?: Long.MAX_VALUE
+                if (channel.event?.status(now) == ChannelText.EventStatus.LIVE) -start else start
+            }
+        )
+    }
+
+    /** Events on now or later today/tomorrow, for the Home card. */
+    fun upcomingEventCount(): Pair<Int, Int> {
+        val now = System.currentTimeMillis()
+        var live = 0
+        var soon = 0
+        channels.forEach { channel ->
+            if (channel.lane != BrowseLane.EVENTS.label) return@forEach
+            val info = channel.event ?: return@forEach
+            when (info.status(now)) {
+                ChannelText.EventStatus.LIVE -> live++
+                ChannelText.EventStatus.UPCOMING -> if ((info.start ?: 0) - now < 36 * 3_600_000L) soon++
+                else -> Unit
+            }
+        }
+        return live to soon
     }
 
     fun search(base: List<Channel>, query: String): List<Channel> {
         val tokens = ChannelText.tokens(query)
         if (tokens.isEmpty()) return base
         return base.mapNotNull { channel -> ChannelText.score(channel, tokens)?.let { channel to it } }
-            .sortedBy { it.second }
+            .sortedWith(compareBy({ it.second }, { if (isUnavailable(it.first.id)) 1 else 0 }))
             .map { it.first }
     }
 
