@@ -92,6 +92,7 @@ private fun ChannelFinderApp(probe: String? = null) {
                     is Page.CategoryPicker -> CategoryPickerScreen(state, page)
                     is Page.Browse -> BrowserScreen(state, page)
                     is Page.Player -> PlayerScreen(state, page)
+                    is Page.Guide -> GuideScreen(state, page)
                 }
             }
         }

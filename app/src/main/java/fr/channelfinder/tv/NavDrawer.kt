@@ -2,6 +2,8 @@ package fr.channelfinder.tv
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsSoccer
 import androidx.compose.material.icons.rounded.Stadium
@@ -71,6 +74,7 @@ private val mainEntries = listOf(
 
 // Guideline: 1–3 actions at the bottom.
 private val bottomEntries = listOf(
+    DrawerEntry(NavDest.GUIDE, "Guide TV", Icons.Rounded.Schedule),
     DrawerEntry(NavDest.CATEGORIES, "Catégories", Icons.Rounded.GridView),
     DrawerEntry(NavDest.SETTINGS, "Réglages", Icons.Rounded.Settings)
 )
@@ -107,6 +111,7 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
                 Modifier.fillMaxHeight()
                     .background(Palette.Ink)
                     .padding(horizontal = 12.dp, vertical = Spacing.Top)
+                    .verticalScroll(rememberScrollState())
                     .onFocusChanged { drawerHasFocus = it.hasFocus }
                     // Entering the drawer always lands on the current destination.
                     .focusProperties { onEnter = { runCatching { requesters.getValue(active).requestFocus() } } }
@@ -121,11 +126,11 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
                     }
                 }
                 DrawerItem(topEntry, active, requesters, ::select)
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(8.dp))
                 mainEntries.forEach { entry ->
                     DrawerItem(entry, active, requesters, ::select, badge = if (entry.dest == NavDest.EVENTS) state.eventCounts.first else 0)
                 }
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.height(8.dp))
                 bottomEntries.forEach { entry -> DrawerItem(entry, active, requesters, ::select) }
             }
         },
@@ -151,7 +156,7 @@ private fun NavigationDrawerScope.DrawerItem(
     NavigationDrawerItem(
         selected = entry.dest == active,
         onClick = { onSelect(entry.dest) },
-        modifier = Modifier.padding(vertical = 3.dp).focusRequester(requesters.getValue(entry.dest)),
+        modifier = Modifier.padding(vertical = 1.dp).focusRequester(requesters.getValue(entry.dest)),
         leadingContent = {
             Box(contentAlignment = Alignment.Center) {
                 if (entry.icon != null) Icon(entry.icon, contentDescription = null, modifier = Modifier.size(24.dp))

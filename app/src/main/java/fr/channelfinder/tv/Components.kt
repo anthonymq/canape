@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.runtime.Composable
@@ -308,7 +310,7 @@ fun TvButton(
 fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     FocusSurface(
         onClick = onClick,
-        modifier = modifier.height(if (compact) 32.dp else 38.dp),
+        modifier = modifier.heightIn(min = if (compact) 32.dp else 38.dp).semantics { this.selected = selected },
         shape = CircleShape,
         container = if (selected) Palette.AccentDeep else Color.Transparent,
         content = if (selected) Palette.OnSurface else Palette.Muted,
@@ -316,7 +318,7 @@ fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modif
         focusedScale = 1.06f
     ) {
         Row(
-            Modifier.align(Alignment.Center).padding(horizontal = if (compact) 12.dp else 15.dp),
+            Modifier.align(Alignment.Center).padding(horizontal = if (compact) 12.dp else 15.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
@@ -333,7 +335,7 @@ fun Badge(text: String, modifier: Modifier = Modifier, tone: Color = LocalConten
             .border(1.dp, tone.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
-        Text(text, style = Type.Badge, color = tone)
+        Text(text, style = Type.Badge, color = tone, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -411,10 +413,10 @@ fun TvTextField(
         if (editing) {
             // The field may not be ready yet (a screen fading in after a drawer choice): a focus request then
             // does nothing and focus stays where it was, so Back would act there. Retry until it really lands.
-            repeat(12) {
-                delay(if (it == 0) 30L else 50L)
+            for (attempt in 0 until 12) {
+                delay(if (attempt == 0) 30L else 50L)
                 runCatching { fieldFocus.requestFocus() }
-                if (fieldFocused) return@repeat
+                if (fieldFocused) break
             }
             if (!fieldFocused) {
                 onEditingChange(false)
@@ -438,7 +440,8 @@ fun TvTextField(
     val shape = RoundedCornerShape(14.dp)
     Surface(
         onClick = { onEditingChange(true) },
-        modifier = modifier.focusRequester(outerFocusRequester).heightIn(min = 48.dp),
+        modifier = modifier.focusRequester(outerFocusRequester).heightIn(min = 48.dp)
+            .semantics { contentDescription = placeholder },
         interactionSource = interaction,
         shape = ClickableSurfaceDefaults.shape(shape = shape),
         colors = ClickableSurfaceDefaults.colors(
@@ -525,7 +528,7 @@ fun Clock(modifier: Modifier = Modifier, style: androidx.compose.ui.text.TextSty
 /** Key cap + label pairs, e.g. ("OK", "Regarder"). */
 @Composable
 fun HintBar(vararg hints: Pair<String, String>, modifier: Modifier = Modifier) {
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(26.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         hints.forEach { (key, label) ->
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
@@ -623,7 +626,7 @@ fun EventTag(channel: Channel, modifier: Modifier = Modifier, timeOnly: Boolean 
 /** Shown on channels whose stream failed in the last hours. */
 @Composable
 fun UnavailableTag(modifier: Modifier = Modifier) {
-    Badge("INDISPONIBLE", modifier, tone = Palette.Error)
+    Badge("INDISPONIBLE", modifier, tone = if (LocalContentColor.current.luminance() < 0.5f) Palette.ErrorOnLight else Palette.Error)
 }
 
 /**

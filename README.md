@@ -1,4 +1,4 @@
-# Channel Finder TV
+# Easy IPTV
 
 A native Android TV / Google TV starter app built around quick channel discovery rather than a full-screen EPG.
 
@@ -13,7 +13,7 @@ A native Android TV / Google TV starter app built around quick channel discovery
 
 Open **Catégories** from Home, search or browse the provider's category list, then select the star on a category row. Pinned categories appear on Home with their channel counts and open directly to that category. Category favorites are stored locally by Xtream category ID, so labels do not need to be parsed from channel names.
 
-The app does not include a program guide. It shows a small guide marker only for channels that provide an EPG ID.
+The TV guide loads programme schedules from the saved Xtream provider, with times and programme details. Coverage depends on the provider; channels without schedules remain playable.
 
 ## Security notes
 
@@ -26,6 +26,18 @@ The app does not include a program guide. It shows a small guide marker only for
 
 See `AGENTS.md` for the toolchain (JDK 17, AGP 9.4.1, compileSdk 37), build, and emulator commands. Test playback on the target Google TV device; provider stream formats and network behavior vary.
 
+## Download a Google TV APK
+
+The [Google TV APK workflow](https://github.com/anthonymq/easy-iptv/actions/workflows/google-tv-apk.yml) runs on pushes and pull requests to `main`, and can also be started with **Run workflow**. It runs unit tests and builds the app using JDK 17 and Android SDK 37.
+
+Open a successful run and download the **easy-iptv-google-tv** artifact. Unzip it to get `easy-iptv-google-tv.apk`, then sideload it on an Android TV or Google TV device (Android 6.0 or newer):
+
+```bash
+adb install -r easy-iptv-google-tv.apk
+```
+
+This is a debug-signed APK for testing, not a Play Store release. CI artifacts expire after 30 days. GitHub runners generate their own debug signing key, so replacing an APK from a different build may require uninstalling the old app first, which removes its saved account and preferences. The application ID remains `fr.channelfinder.tv` to preserve existing local installations.
+
 ## Current scope
 
 - Xtream live categories and live channel metadata
@@ -33,4 +45,5 @@ See `AGENTS.md` for the toolchain (JDK 17, AGP 9.4.1, compileSdk 37), build, and
 - Muted, focus-driven live preview with a short switch delay
 - Local favorites and recent channels
 - Media3 TS playback
+- Provider programme schedules and details
 - No EPG grid, recording, parental controls, or duplicate deletion

@@ -23,6 +23,7 @@ private const val STREAM_USER_AGENT = "VLC/3.0.21 LibVLC/3.0.21"
  * apps) and pauses when the audio output disconnects; the muted preview does neither.
  * @param audioLanguages preferred audio languages, most wanted first (ISO 639 codes).
  */
+@OptIn(UnstableApi::class)
 fun buildStreamPlayer(context: Context, fullScreen: Boolean = false, audioLanguages: List<String> = emptyList()): ExoPlayer {
     val httpFactory = DefaultHttpDataSource.Factory()
         .setUserAgent(STREAM_USER_AGENT)

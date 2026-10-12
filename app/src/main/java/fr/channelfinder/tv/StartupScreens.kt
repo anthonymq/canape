@@ -305,7 +305,7 @@ fun SettingsScreen(state: AppState) {
     val updated = describeUpdate(state.lastUpdated)
 
     Column(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
-        ScreenHeader("Channel Finder", "Réglages", trailing = { Clock() })
+        ScreenHeader("Easy IPTV", "Réglages", trailing = { Clock() })
         Spacer(Modifier.height(28.dp))
         Column(
             Modifier.widthIn(max = 720.dp).weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
@@ -366,7 +366,7 @@ fun SettingsScreen(state: AppState) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Channel Finder $version · ${number.format(state.channels.size)} chaînes · ${number.format(state.categories.size)} catégories",
+            "Easy IPTV $version · ${number.format(state.channels.size)} chaînes · ${number.format(state.categories.size)} catégories",
             style = Type.Caption, color = Palette.Faint
         )
         Spacer(Modifier.height(12.dp))
@@ -392,7 +392,7 @@ private fun SettingsRow(
             Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp))
             Column(Modifier.weight(1f)) {
                 Text(title, style = Type.TitleSmall)
-                Text(subtitle, style = Type.Caption, color = secondaryColor(), maxLines = 1)
+                Text(subtitle, style = Type.Caption, color = secondaryColor(), maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
             trailing()
         }

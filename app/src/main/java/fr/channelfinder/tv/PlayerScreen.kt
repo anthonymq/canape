@@ -248,7 +248,8 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
                         else if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) false
                         else { showBanner(); true }
                     }
-                    Key.DirectionLeft, Key.Info, Key.Guide -> {
+                    Key.DirectionLeft, Key.Guide -> { state.openGuide(shownChannel, playlist.mapNotNull(state.channelsById::get)); true }
+                    Key.Info -> {
                         if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) false else { showBanner(); true }
                     }
                     else -> false
@@ -416,6 +417,7 @@ private fun ChannelBanner(
             Spacer(Modifier.weight(1f))
             if (hasTrackChoice) HintBar("▶" to "Audio et sous-titres")
             HintBar(if (paused) "OK" to "Reprendre le direct" else "OK" to "Masquer", "RETOUR" to "Liste")
+            HintBar("◀" to "Guide TV")
         }
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -16,12 +17,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -114,10 +117,11 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val searchFocus = remember { FocusRequester() }
     val selectedRowFocus = remember { FocusRequester() }
     val watchFocus = remember { FocusRequester() }
-    val countryFocus = remember { mutableMapOf<String?, FocusRequester>() }
+    val countryFocus = remember(countries) { (listOf<String?>(null) + countries).associateWith { FocusRequester() } }
     val qualityFocus = remember { (listOf<ChannelText.VideoQuality?>(null) + ChannelText.VideoQuality.entries).associateWith { FocusRequester() } }
     var editing by remember { mutableStateOf(page.startSearch) }
     var listHasFocus by remember { mutableStateOf(false) }
+    var previewHasFocus by remember { mutableStateOf(false) }
 
     // Back in a scrolled list returns to the top. On a screen opened from the drawer it also opens the
     // drawer (left navigation guideline); in a sub-page (a category from the picker) the next Back leaves.
@@ -233,7 +237,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
         }
         if (countries.isNotEmpty()) Row(
             Modifier
-                .focusProperties { onEnter = { runCatching { countryFocus.getOrPut(country) { FocusRequester() }.requestFocus() } } }
+                .focusProperties { onEnter = { runCatching { countryFocus.getValue(country).requestFocus() } } }
                 .focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -244,7 +248,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                     text = code?.let(ChannelText::countryLabel) ?: "Tous",
                     selected = country == code,
                     onClick = { state.replaceTop(page.copy(country = code)) },
-                    modifier = Modifier.focusRequester(countryFocus.getOrPut(code) { FocusRequester() })
+                    modifier = Modifier.focusRequester(countryFocus.getValue(code))
                         .downToList(selectedRowFocus, results.isNotEmpty()),
                     compact = true
                 )
@@ -255,7 +259,9 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
 
         if (results.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                BrowseEmptyState(page, state, quality)
+                BrowseEmptyState(page, state, quality, country) {
+                    scope.launch { focusWhenReady(selectedRowFocus, searchFocus) }
+                }
             }
         } else {
             Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
@@ -305,6 +311,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                         channel = selected,
                         isFavorite = selected.id in state.favorites,
                         onWatch = { state.play(selected, results) },
+                        onGuide = { state.openGuide(selected, results) },
                         onToggleFavorite = { state.toggleFavorite(selected) },
                         onRemoveRecent = if (page.lane == BrowseLane.RECENT && page.categoryId == null) {
                             {
@@ -315,23 +322,47 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                             }
                         } else null,
                         watchFocus = watchFocus,
+                        listFocus = selectedRowFocus,
                         modifier = Modifier.weight(0.88f).fillMaxHeight()
+                            .onFocusChanged { previewHasFocus = it.hasFocus }
                     )
                 }
             }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            val hints = buildList {
+                add("OK" to if (listHasFocus && selected != null) "Regarder" else "Choisir")
+                if (listHasFocus && selected?.event == null && selected != null) add("OK long" to "Favori")
+                if (listHasFocus && results.isNotEmpty()) add("▶" to "Options")
+                if (previewHasFocus) add("◀" to "Liste")
+                add("RETOUR" to if (state.isDrawerRoot) "Menu" else "Revenir")
+            }
+            HintBar(*hints.toTypedArray(), modifier = Modifier.weight(1f))
+            if (selected != null) Text(
+                "${number.format(results.indexOfFirst { it.id == selected.id } + 1)} / ${number.format(results.size)}",
+                style = Type.Caption, color = Palette.Faint
+            )
         }
     }
 }
 
 @Composable
-private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: ChannelText.VideoQuality?) {
+private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: ChannelText.VideoQuality?, country: String?, onRecover: () -> Unit) {
     when {
+        country != null && state.search(state.channelsFor(page.lane, page.categoryId), page.query, quality).isNotEmpty() -> EmptyState(
+            Icons.Rounded.SearchOff,
+            "Aucun résultat pour ce pays",
+            "Essayez les autres pays de cette sélection."
+        ) {
+            TvButton("Tous les pays", { state.replaceTop(page.copy(country = null)); onRecover() }, icon = Icons.Rounded.Clear, primary = true)
+        }
         quality != null && state.search(state.channelsFor(page.lane, page.categoryId), page.query).isNotEmpty() -> EmptyState(
             Icons.Rounded.SearchOff,
             "Aucune chaîne en ${quality.label} ici",
             "Cette sélection existe dans d’autres qualités."
         ) {
-            TvButton("Toutes les qualités", { state.setQuality(null) }, icon = Icons.Rounded.Clear, primary = true)
+            TvButton("Toutes les qualités", { state.setQuality(null); onRecover() }, icon = Icons.Rounded.Clear, primary = true)
         }
         page.query.isNotBlank() -> EmptyState(
             Icons.Rounded.SearchOff,
@@ -344,7 +375,7 @@ private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: Channe
                     TvButton("Chercher partout", { state.replaceTop(page.copy(lane = BrowseLane.ALL, categoryId = null)) },
                         icon = Icons.Rounded.Search, primary = true)
                 }
-                TvButton("Effacer la recherche", { state.replaceTop(page.copy(query = "")) }, icon = Icons.Rounded.Clear)
+                TvButton("Effacer la recherche", { state.replaceTop(page.copy(query = "")); onRecover() }, icon = Icons.Rounded.Clear)
             }
         }
         page.lane == BrowseLane.FAVORITES -> EmptyState(
@@ -380,13 +411,13 @@ private fun ChannelRow(
         onClick = onPlay,
         onLongClick = onToggleFavorite,
         interactionSource = interaction,
-        modifier = modifier.fillMaxWidth().height(56.dp).onFocusChanged { if (it.isFocused) onFocus() },
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp).onFocusChanged { if (it.isFocused) onFocus() },
         container = if (isPreviewing) Palette.AccentDeep else Palette.Surface1,
         outline = if (isPreviewing) Palette.Accent else null,
         focusedScale = 1.03f
     ) {
         Row(
-            Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
@@ -407,10 +438,7 @@ private fun ChannelRow(
             if (isFavorite) Icon(Icons.Rounded.Star, contentDescription = "Favori", tint = if (focused) Palette.GoldOnLight else Palette.Gold, modifier = Modifier.size(24.dp))
             // Lists guideline: an indicator, not only a background colour, marks the row shown in the preview.
             if (isPreviewing) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Palette.Accent, modifier = Modifier.size(18.dp))
-                    Text("Aperçu", style = Type.Caption, color = Palette.Accent)
-                }
+                Icon(Icons.Rounded.PlayArrow, contentDescription = "Chaîne sélectionnée pour l’aperçu", tint = Palette.Accent, modifier = Modifier.size(18.dp))
             }
         }
     }
@@ -422,9 +450,11 @@ private fun PreviewPane(
     channel: Channel,
     isFavorite: Boolean,
     onWatch: () -> Unit,
+    onGuide: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRemoveRecent: (() -> Unit)?,
     watchFocus: FocusRequester,
+    listFocus: FocusRequester,
     modifier: Modifier
 ) {
     val notStarted = ChannelText.notStartedYet(channel.event)
@@ -434,6 +464,9 @@ private fun PreviewPane(
     val started = lifecycle.isAtLeast(Lifecycle.State.STARTED)
     val context = LocalContext.current
     val account = state.account ?: return
+    val favoriteFocus = remember { FocusRequester() }
+    val guideFocus = remember { FocusRequester() }
+    val removeFocus = remember { FocusRequester() }
     val player = remember { buildStreamPlayer(context) }
     var reportedState by remember { mutableStateOf(PreviewState.WAITING) }
     var reportedFor by remember { mutableStateOf<String?>(null) }
@@ -503,7 +536,7 @@ private fun PreviewPane(
         player.prepare()
     }
 
-    Column(modifier) {
+    Column(modifier.verticalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 6.dp)) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(16.dp)).background(Color.Black)
         ) {
@@ -523,7 +556,7 @@ private fun PreviewPane(
                             Icon(Icons.Rounded.Schedule, contentDescription = null, tint = Palette.Accent, modifier = Modifier.size(34.dp))
                             Spacer(Modifier.height(8.dp))
                             Text(channel.event?.let(ChannelText::eventStartSentence).orEmpty(), style = Type.Label, color = Palette.OnSurface, textAlign = TextAlign.Center)
-                            Text("L’aperçu démarrera au début du direct.", style = Type.Caption, color = Palette.Muted, textAlign = TextAlign.Center)
+                            Text("L’aperçu sera disponible au début du direct.", style = Type.Caption, color = Palette.Muted, textAlign = TextAlign.Center)
                         }
                     } else if (previewState == PreviewState.ERROR) {
                         Column(Modifier.padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -531,12 +564,16 @@ private fun PreviewPane(
                             Spacer(Modifier.height(8.dp))
                             Text("Aperçu indisponible", style = Type.Label, color = Palette.OnSurface)
                             Text(errorText, style = Type.Caption, color = Palette.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Essayez avec « Regarder ».", style = Type.Caption, color = Palette.OnSurface, textAlign = TextAlign.Center)
                         }
                     } else {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             ChannelLogo(channel, Modifier.size(width = 120.dp, height = 72.dp), initialsSize = 24)
                             Spacer(Modifier.height(14.dp))
                             Spinner(Modifier.size(26.dp), color = Palette.Muted, stroke = 3.dp)
+                            Spacer(Modifier.height(8.dp))
+                            Text("Chargement de l’aperçu…", style = Type.Caption, color = Palette.Muted)
                         }
                     }
                 }
@@ -558,19 +595,22 @@ private fun PreviewPane(
         Spacer(Modifier.height(14.dp))
         Text(channel.displayName, style = Type.Title, color = Palette.OnSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(6.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (state.isUnavailable(channel.id)) UnavailableTag()
             EventTag(channel)
             channel.countryTag?.let { Badge(it, tone = Palette.Muted) }
             channel.badges.forEach { Badge(it, tone = Palette.Muted) }
-            if (channel.epgId.isNotBlank()) Badge("GUIDE", tone = Palette.Muted)
             Text(channel.categoryDisplay, style = Type.Caption, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(16.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            TvButton("Regarder", onWatch, Modifier.focusRequester(watchFocus), icon = Icons.Rounded.PlayArrow, primary = true)
-            if (channel.event == null) FavoriteButton(isFavorite, onToggleFavorite)
-            if (onRemoveRecent != null) TvButton("Retirer", onRemoveRecent, icon = Icons.Rounded.Clear)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val afterWatch = guideFocus
+            TvButton("Regarder", onWatch, Modifier.focusRequester(watchFocus).returnToList(listFocus, afterWatch), icon = Icons.Rounded.PlayArrow, primary = true)
+            TvButton("Guide TV", onGuide, Modifier.focusRequester(guideFocus).returnToList(listFocus,
+                if (channel.event == null) favoriteFocus else if (onRemoveRecent != null) removeFocus else listFocus), icon = Icons.Rounded.Schedule)
+            if (channel.event == null) FavoriteButton(isFavorite, onToggleFavorite,
+                Modifier.focusRequester(favoriteFocus).returnToList(listFocus, if (onRemoveRecent != null) removeFocus else listFocus))
+            if (onRemoveRecent != null) TvButton("Retirer", onRemoveRecent, Modifier.focusRequester(removeFocus).returnToList(listFocus), icon = Icons.Rounded.Clear)
         }
 
     }
@@ -581,6 +621,12 @@ private fun plural(count: Int) = if (count > 1) "s" else ""
 /** Down from a filter chip lands on the list, never on the preview buttons that sit lower right. */
 private fun Modifier.downToList(list: FocusRequester, hasResults: Boolean): Modifier =
     if (hasResults) focusProperties { down = list } else this
+
+private fun Modifier.returnToList(list: FocusRequester, nextAction: FocusRequester = list): Modifier = focusProperties {
+    left = list
+    down = nextAction
+    if (nextAction != list) right = nextAction
+}
 
 /** Day section of a match feed in Événements. */
 private fun eventSection(channel: Channel): String? {

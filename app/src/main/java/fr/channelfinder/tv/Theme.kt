@@ -30,6 +30,7 @@ object Palette {
     val Warning = Color(0xFFFFCB80)
     val WarningSurface = Color(0xFF2E2414)
     val Error = Color(0xFFFF9C9C)
+    val ErrorOnLight = Color(0xFFA52332)
     val ErrorSurface = Color(0xFF331A1E)
     val LogoPlate = Color(0xFF223047)
 }

@@ -1,6 +1,7 @@
 package fr.channelfinder.tv
 
 import android.net.Uri
+import android.os.CancellationSignal
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -68,33 +69,57 @@ class XtreamRepository {
     )
 
     private fun getArray(account: XcAccount, action: String, onConnected: () -> Unit): JSONArray {
-        val query = "username=${enc(account.username)}&password=${enc(account.password)}&action=${enc(action)}"
+        val json = request(account, action, onConnected = onConnected).trim()
+        if (json.startsWith("{")) {
+            val accountInfo = JSONObject(json).optJSONObject("user_info")
+            if (accountInfo?.optInt("auth", 1) == 0) throw CatalogException("Utilisateur ou mot de passe refusé par le fournisseur.")
+            throw CatalogException("Réponse inattendue du fournisseur. Vérifiez qu’il s’agit bien d’une adresse Xtream.")
+        }
+        if (json.isEmpty()) throw CatalogException("Utilisateur ou mot de passe refusé par le fournisseur.")
+        return JSONArray(json)
+    }
+
+    fun loadGuide(account: XcAccount, channelId: String, cancellation: CancellationSignal): List<TvProgramme> = translateErrors {
+        parseGuide(request(account, "get_simple_data_table", "&stream_id=${enc(channelId)}", guide = true, cancellation = cancellation))
+    }
+
+    private fun request(account: XcAccount, action: String, extra: String = "", guide: Boolean = false,
+                        cancellation: CancellationSignal? = null, onConnected: () -> Unit = {}): String {
+        val query = "username=${enc(account.username)}&password=${enc(account.password)}&action=${enc(action)}$extra"
         val connection = URL("${account.serverUrl.trimEnd('/')}/player_api.php?$query").openConnection() as HttpURLConnection
+        cancellation?.setOnCancelListener { connection.disconnect() }
         connection.connectTimeout = 15_000
-        connection.readTimeout = 60_000
+        connection.readTimeout = if (guide) 20_000 else 60_000
         connection.requestMethod = "GET"
-        connection.setRequestProperty("User-Agent", "ChannelFinderTV/0.2")
+        connection.setRequestProperty("User-Agent", "EasyIPTV/0.2")
         try {
+            cancellation?.throwIfCanceled()
             val status = connection.responseCode
             onConnected()
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-            val body = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val body = stream?.bufferedReader(Charsets.UTF_8)?.use {
+                if (guide) {
+                    val text = StringBuilder()
+                    val buffer = CharArray(8192)
+                    while (true) {
+                        val count = it.read(buffer)
+                        if (count < 0) break
+                        if (text.length + count > 2_000_000) throw CatalogException("Le guide reçu est trop volumineux. Réessayez plus tard.")
+                        text.append(buffer, 0, count)
+                    }
+                    text.toString()
+                } else it.readText()
+            }.orEmpty()
             when {
                 status == 401 || status == 403 -> throw CatalogException("Utilisateur ou mot de passe refusé par le fournisseur.")
                 status == 404 -> throw CatalogException("Ce serveur ne ressemble pas à un service Xtream. Vérifiez l’adresse et le port.")
                 status >= 500 -> throw CatalogException("Le fournisseur rencontre un problème (erreur $status). Réessayez dans quelques minutes.")
                 status !in 200..299 -> throw CatalogException("Le fournisseur a refusé la demande (erreur $status).")
             }
-            val json = body.trim()
-            if (json.startsWith("{")) {
-                val accountInfo = JSONObject(json).optJSONObject("user_info")
-                if (accountInfo?.optInt("auth", 1) == 0) throw CatalogException("Utilisateur ou mot de passe refusé par le fournisseur.")
-                throw CatalogException("Réponse inattendue du fournisseur. Vérifiez qu’il s’agit bien d’une adresse Xtream.")
-            }
-            if (json.isEmpty()) throw CatalogException("Utilisateur ou mot de passe refusé par le fournisseur.")
-            return JSONArray(json)
+            return body
         } finally {
             connection.disconnect()
+            cancellation?.setOnCancelListener(null)
         }
     }
 

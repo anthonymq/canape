@@ -35,6 +35,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     private val prefs = context.getSharedPreferences("channel_usage", Context.MODE_PRIVATE)
     private val cache = CatalogCache(context)
     val repository = XtreamRepository()
+    val guideRepository = GuideRepository(repository)
 
     var account by mutableStateOf(credentialStore.load())
         private set
@@ -200,6 +201,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
             NavDest.SPORTS -> Page.Browse(BrowseLane.SPORTS)
             NavDest.EVENTS -> Page.Browse(BrowseLane.EVENTS)
             NavDest.FAVORITES -> Page.Browse(BrowseLane.FAVORITES)
+            NavDest.GUIDE -> guideHome()
             NavDest.CATEGORIES -> Page.CategoryPicker()
             NavDest.SETTINGS -> Page.Settings
         }
@@ -212,6 +214,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         get() = when (val root = backStack.getOrNull(1)) {
             null -> NavDest.HOME
             Page.Settings -> NavDest.SETTINGS
+            is Page.Guide -> NavDest.GUIDE
             is Page.CategoryPicker -> NavDest.CATEGORIES
             is Page.Browse -> when {
                 root.categoryId != null -> NavDest.HOME // a pinned category opened from Home
@@ -456,6 +459,27 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     fun play(channel: Channel, playlist: List<Channel>) {
         rememberWatched(channel.id)
         navigate(Page.Player(channel.id, playlist.map { it.id }))
+    }
+
+    private fun guideHome(): Page {
+        val list = channelsFor(BrowseLane.FRANCE, null).filter { qualityFilter == null || it.quality == qualityFilter }
+            .ifEmpty { channelsFor(BrowseLane.FRANCE, null) }.ifEmpty { channels }
+        return list.firstOrNull()?.let { Page.Guide(it.id, list.map(Channel::id)) } ?: Page.Home
+    }
+
+    fun openGuide(channel: Channel, playlist: List<Channel>) {
+        navigate(Page.Guide(channel.id, playlist.map(Channel::id)))
+    }
+
+    fun watchFromGuide(channel: Channel, playlist: List<Channel>) {
+        val previous = backStack.getOrNull(backStack.lastIndex - 1)
+        if (previous is Page.Player) {
+            back()
+            zapTo(channel.id)
+        } else {
+            rememberWatched(channel.id)
+            navigate(Page.Player(channel.id, playlist.map(Channel::id)))
+        }
     }
 
     fun zapTo(channelId: String) {

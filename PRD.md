@@ -1,16 +1,16 @@
-# Channel Finder TV Product Requirements
+# Easy IPTV Product Requirements
 
-_Last updated: 2026-10-11 (UI/UX overhaul)_
+_Last updated: 2026-10-12 (TV guide)_
 
 ## Product summary
 
-Channel Finder TV is a Google TV / Android TV app for finding live channels in a large user-supplied Xtream Codes playlist. It is designed for a viewer who finds typical IPTV apps difficult to navigate. The playlist currently contains 24,057 live channels, so the product prioritizes direct destinations, local search, simple favorites, and a live preview while browsing.
+Easy IPTV is a Google TV / Android TV app for finding live channels in a large user-supplied Xtream Codes playlist. It is designed for a viewer who finds typical IPTV apps difficult to navigate. The playlist currently contains 24,057 live channels, so the product prioritizes direct destinations, local search, simple favorites, and a live preview while browsing.
 
 The project is a working prototype. It builds a debug APK, runs on a Google TV emulator (Android 14), loads the full playlist, and plays live streams in both the muted preview and full screen. It has not yet been tested on a physical Google TV device (see [Known issues](#known-issues)). The UI follows the Android TV design guidelines (developer.android.com/design/ui/tv): 58 dp side / 28 dp top-bottom safe margins, standard card widths, a single focus treatment, no on-screen back buttons, and Back-to-top on Home.
 
 ## User and problem
 
-The primary viewer is a family member using a TV remote, not a phone or mouse. He wants to find French and Portuguese channels quickly, with sports easy to reach. The playlist is much larger than can be browsed comfortably as one long list. There is no separate EPG source.
+The primary viewer is a family member using a TV remote, not a phone or mouse. He wants to find French and Portuguese channels quickly, with sports easy to reach. The playlist is much larger than can be browsed comfortably as one long list. There is no separate EPG source; programme schedules now come from the saved Xtream provider.
 
 The interface must work with D-pad focus and OK/Back actions. It should make the next useful action obvious and avoid requiring the viewer to understand provider category IDs or Xtream terminology.
 
@@ -44,7 +44,7 @@ Many Xtream providers only offer HTTP and redirect stream requests to other serv
 
 ### Navigation drawer
 
-Browsing screens (Accueil, lanes, search, Catégories, Réglages) sit in a modal navigation drawer, per the Android TV navigation drawer guideline. Collapsed, it is an 80 dp icon rail; focusing it (Left from the leftmost element) expands it over the content with a scrim, on the current destination's item. Items: **Rechercher** at the top (searches every channel); **Accueil, France, Português, Sports, Événements, Favoris** as the six main destinations; **Catégories** and **Réglages** at the bottom. Récents has no item; its full list opens from the "Tout voir" card at the end of Reprendre. The active destination has a highlighted background. Événements shows a red dot (count when expanded) while matches are live. Playback, setup and loading screens have no drawer.
+Browsing screens (Accueil, lanes, search, Catégories, Réglages) sit in a modal navigation drawer, per the Android TV navigation drawer guideline. Collapsed, it is an 80 dp icon rail; focusing it (Left from the leftmost element) expands it over the content with a scrim, on the current destination's item. Items: **Rechercher** at the top (searches every channel); **Accueil, France, Português, Sports, Événements, Favoris** as the six main destinations; **Guide TV**, **Catégories** and **Réglages** at the bottom. The drawer scrolls with focus when these entries exceed the available height. Récents has no item; its full list opens from the "Tout voir" card at the end of Reprendre. The active destination has a highlighted background. Événements shows a red dot (count when expanded) while matches are live. Playback, the full-screen guide, setup and loading screens have no drawer.
 
 Back follows the guideline for side navigation: on a screen opened from the drawer, Back (after returning a scrolled list to the top) opens the drawer on that screen's item; Back in the drawer goes to Accueil; on Accueil, Back opens the drawer and a further Back leaves the app. Sub-pages (a category opened from the picker, Récents) return to the screen they came from. Each list's own search field searches only that list ("Rechercher dans France").
 
@@ -75,9 +75,9 @@ The supplied playlist snapshot identified `731` as `PT ‖ DESPORTO PORTUGAL` an
 
 ### Channel browser and preview
 
-The browser uses two panes: a focusable channel list on the left and a 16:9 live preview with channel details and actions on the right. Moving focus to a channel updates the preview selection. The preview starts muted after 650 ms without a focus change, which avoids opening a new stream for every quick D-pad movement. The viewer can choose **Regarder** or press OK on a channel row to open full-screen playback. Favorites are toggled with a long press on OK (any channel row or card) or the preview's favorite button; rows have no second focus target. Right from the list always lands on **Regarder**; Up from the list lands on the selected lane chip; Left/Down return to the last focused row. Rows show the provider logo (Coil, bounded to 256 px, initials fallback), a cleaned name, country and quality badges, and a star for favorites. The previewed row stays highlighted while focus is in the preview pane.
+The browser uses two panes: a focusable channel list on the left and a 16:9 live preview with channel details and actions on the right. Moving focus to a channel updates the preview selection. The preview starts muted after 650 ms without a focus change, which avoids opening a new stream for every quick D-pad movement. The viewer can choose **Regarder** or press OK on a channel row to open full-screen playback. Favorites are toggled with a long press on OK (any channel row or card) or the preview's favorite button; rows have no second focus target. Right from the list always lands on **Regarder**; Up from the list lands on the selected lane chip; Left returns to the last focused row. Right/Down traverse preview actions, and Down from the final action returns to the row. Rows show the provider logo (Coil, bounded to 256 px, initials fallback), a cleaned name, country and quality badges, and a star for favorites. The previewed row stays highlighted while focus is in the preview pane.
 
-A **Qualité** row under the lane chips filters the list by video quality (Toutes, 4K, Full HD, HD, SD), read from the channel name's quality tag or, failing that, the category's ("FRANCE • UHD/4K", "FRANCE • SD"). Channels without a quality tag only appear under Toutes. The choice is remembered between sessions and applies to every lane; an empty result offers **Toutes les qualités**.
+A **Qualité** row under the screen header filters the list by video quality (Toutes, 4K, Full HD, HD, SD), read from the channel name's quality tag or, failing that, the category's ("FRANCE • UHD/4K", "FRANCE • SD"). Channels without a quality tag only appear under Toutes. The choice is remembered between sessions and applies to every lane; an empty result offers **Toutes les qualités**.
 
 Quality is not applied in Événements, Favoris and Récents (events rarely carry a quality tag; favorites and recents are the viewer's own picks), and the row is hidden there.
 
@@ -95,6 +95,12 @@ When returning from full-screen playback, restore the selected channel and list 
 
 Media3/ExoPlayer plays the selected live stream with sound; there is no seek bar (live TV). A channel banner (logo, name, badges, position in list, clock, previous/next channel) shows on start and on any key, and hides after 5 s; OK toggles it. Up/Down (and CH+/CH−) zap through the list the channel was opened from; the banner follows immediately and the stream switches once the viewer pauses (500 ms). A failed stream is retried once silently; then a card explains the failure in plain language (HTTP 407, 404, connection limits, unsupported format…) with **Réessayer** and **Chaîne suivante**. Back returns to the previous screen (an in-app back stack) with the last watched channel selected.
 
+### TV guide
+
+**Guide TV** opens from the drawer (France channels with the saved quality filter), the preview action (the current list), or **Left** during playback. The dedicated Guide key is also handled when forwarded by the device. The full-screen guide has a channel column, chronological programme list, and programme description/direct-play pane. Focusing a channel loads its schedule; Right enters the current or next programme. Up/Down browse programmes and update details without opening a stream. Right reaches **Regarder le direct**; Down from that button enters the scrollable description. Left returns to the selected programme/channel. Back returns to the screen that opened the guide. Watching from a browsing guide keeps it under the player so Back returns to it; watching from a playback guide resumes/replaces the existing player rather than stacking another player.
+
+Schedules use `get_simple_data_table` with the channel's stream ID. Base64 UTF-8 titles/descriptions are decoded, invalid intervals skipped, duplicates removed, and provider epoch times displayed in the TV's local timezone. **EN COURS**, **À VENIR**, and **TERMINÉ** use those intervals, not provider now_playing flags. Programme selection always plays the live channel; it does not replay a past programme or schedule a future one. Loading, empty data and connection errors are distinct; **Actualiser** bypasses the cache and errors offer **Réessayer**. Requests settle for 350 ms, cancel when leaving/changing channel, and retain at most 40 channel schedules in an account-isolated 15-minute memory cache. No new account entry or external service is required.
+
 ### Android TV design guide and quality checklist (reviewed 2026-10-12)
 
 The whole TV design guide (foundations, system, styles, components), the TV app quality checklist and the TV accessibility guide were reviewed against the app.
@@ -107,12 +113,22 @@ The whole TV design guide (foundations, system, styles, components), the TV app 
 | Audio | Full-screen playback takes audio focus (the Assistant and other apps duck or pause it) and pauses when the audio output disconnects. Preferred audio languages: the viewer's last choice, then French, then Portuguese. |
 | Lists guideline | Single-choice lists use radio indicators. The row shown in the preview carries an "▶ Aperçu" indicator, not only a background colour. |
 | Buttons guideline | One main action per screen as a filled button, placed first; secondary actions outlined; focused buttons grow 1.1×. |
-| Cards / layout grid | Home cards are 196 dp (four per row) with 20 dp gaps, so all rows line up. |
+| Cards / layout grid | Four Home columns share the actual width after the drawer and 58 dp side margins (186.5 dp on the 960 dp TV canvas), with 20 dp gaps. Lane cards stay visible without horizontal scrolling. |
 | Accessibility (text scaling) | Verified at 130 % system text size: cards grow with their text and lane titles drop their small emoji instead of clipping. Text size, theme, density and locale changes no longer restart the app. |
 | TV-SB (search) | In-app search from the drawer and each list. The remote's search/mic key is handled by Google TV itself and never reaches the app. |
 | Not applicable | Featured carousel and immersive list need large artwork (the provider only supplies small logos). Watch Next / Live tab are not used: Google TV does not show app channel rows and Watch Next targets resumable on-demand content. |
 
 In full screen, **▶** opens **Audio et sous-titres** when the stream has more than one audio track or any subtitles; the remote's **Last channel** key returns to the previous channel.
+
+### Review 5 (2026-10-12)
+
+- Home lane cards and channel cards share four columns calculated from the real drawer-inset content width. The first lane no longer scrolls underneath the rail when the fourth lane is focused.
+- Browsing adds contextual remote hints and selected position / result count. Empty results say **Choisir**, not **Regarder**. Preview actions show **◀ Liste**; Left explicitly restores the selected row even when enlarged text wraps the favorite action. Right/Down move through actions, including Retirer in Récents; Down from the final action restores the row.
+- Preview loading names the operation; a failed preview explains that full-screen playback can still be tried. Upcoming events describe availability without promising automatic startup.
+- Preview metadata/actions wrap and its pane scrolls independently. Channel/category rows, chips and pin controls grow for enlarged text; settings subtitles allow two lines. Unavailable badges use a darker error color on focused light rows. Selected filters and pin actions have accessibility semantics.
+- Text editing opens the keyboard as soon as focus succeeds, instead of waiting through the remaining retry loop. Country-filter empty results offer **Tous les pays**. Recovery buttons restore focus into results after clearing search or resetting quality/country.
+- The GUIDE marker is removed until actual programme data is available. Provider EPG IDs remain in the model.
+- Build and Android lint pass. Detailed emulator scenarios, captured states, limitations and review verdict are recorded in [the UI/UX review](qa/ui-ux-2026-10-12/REVIEW.md).
 
 ### Review 4 (2026-10-12)
 
@@ -135,7 +151,7 @@ In full screen, **▶** opens **Audio et sous-titres** when the stream has more 
 | FR-6 | Pin/unpin channels and retain a recent-channel list. | Verified on emulator: long-press favorite, Home row, recents ordered by recency. |
 | FR-7 | Preview the selected live channel while browsing, muted by default and delayed until focus settles. | Verified on emulator: plays muted; failure state shown. |
 | FR-8 | Open a channel full-screen and restore the prior browsing context on Back. | Verified on emulator: plays with sound; zapping works; Back restores the last watched row. |
-| FR-9 | Show an EPG marker only when a channel has an EPG ID. | Verified ("GUIDE" marker shown). No guide data is available. |
+| FR-9 | Display provider programme schedules with times, current/upcoming status and descriptions. | Implemented through Xtream get_simple_data_table; real TF1 schedule verified on emulator. Empty feeds remain playable. |
 
 ## Technical design
 
@@ -177,6 +193,8 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 
 ## Known issues
 
+- **Distribution (2026-10-12):** the app is named Easy IPTV in its launcher label, banner and settings. The existing application ID is retained. Local unit tests and debug APK build pass; GitHub Actions builds and uploads a debug-signed Google TV APK (see README). Production signing is not configured.
+
 - **Lane classification:** the category's country code now decides the lane when present; name keywords are only used for untagged categories. Sports keeps only FR/PT/BR-tagged groups (391 channels); other countries' sports (including `BE ‖ BELGIQUE • SPORTS`) stay reachable from their category and search.
 - **Provider-side dead channels:** many France/Português channels answer HTTP 407 (see [Unavailable channels](#unavailable-channels)). The app learns them as the viewer meets them; there is no background scan, to avoid extra provider connections on a one-connection account.
 - **Event times:** kickoff times in feed names are read in the TV's time zone; the provider's zone is not documented. Events are considered live for 3 hours after kickoff.
@@ -186,7 +204,7 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 - **Display-name cleanup is heuristic:** only known country-code prefixes and quality tokens are stripped. Raw names are still searched.
 - **Preview may use an additional provider connection.** Verify provider connection limits on-device.
 - **HTTP exposes traffic in transit.** Credentials are encrypted at rest, but the provider endpoint does not protect API or stream requests over the network.
-- **No EPG source is configured.** The "GUIDE" badge only marks channels with an EPG ID. Do not build a guide screen until the user supplies a valid EPG source or chooses a metadata strategy.
+- **Guide coverage depends on the provider.** Some duplicate feeds return no programmes (observed on MY TF1); TF1 returns a real schedule. The guide uses stream IDs, not assumptions about EPG IDs. No external XMLTV fallback, recording or catch-up playback is provided. The dedicated Guide key did not open the guide on this emulator; Left during playback provides the supported shortcut.
 - **Category and channel favorites are device-local.** They do not sync between devices or provider accounts. Recents are cleared when the account changes.
 
 ## Next steps

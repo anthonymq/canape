@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,6 +38,8 @@ import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
@@ -166,11 +169,11 @@ private fun CategoryRow(
         FocusSurface(
             onClick = onOpen,
             onLongClick = onTogglePin,
-            modifier = modifier.weight(1f).height(50.dp).onFocusChanged { if (it.isFocused) onFocus() },
+            modifier = modifier.weight(1f).heightIn(min = 50.dp).onFocusChanged { if (it.isFocused) onFocus() },
             focusedScale = 1.02f
         ) {
             Row(
-                Modifier.fillMaxSize().padding(horizontal = 18.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -190,14 +193,15 @@ private fun PinButton(pinned: Boolean, onClick: () -> Unit) {
     FocusSurface(
         onClick = onClick,
         interactionSource = interaction,
-        modifier = Modifier.height(42.dp).widthIn(min = 42.dp),
+        modifier = Modifier.heightIn(min = 42.dp).widthIn(min = 42.dp)
+            .semantics { contentDescription = if (pinned) "Désépingler la catégorie" else "Épingler la catégorie" },
         shape = CircleShape,
         container = if (pinned) Palette.AccentDeep else Palette.Ink,
         outline = if (pinned) Palette.Accent else Palette.Outline,
         focusedScale = 1.06f
     ) {
         Row(
-            Modifier.align(Alignment.Center).padding(horizontal = if (pinned || focused) 16.dp else 11.dp),
+            Modifier.align(Alignment.Center).padding(horizontal = if (pinned || focused) 16.dp else 11.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {

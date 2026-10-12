@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "ChannelFinderTV"
+rootProject.name = "EasyIPTV"
 include(":app")

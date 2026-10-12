@@ -60,7 +60,7 @@ enum class BrowseLane(val label: String) {
 }
 
 /** Destinations of the navigation drawer, in drawer order. */
-enum class NavDest { SEARCH, HOME, FRANCE, PORTUGUESE, SPORTS, EVENTS, FAVORITES, CATEGORIES, SETTINGS }
+enum class NavDest { SEARCH, HOME, FRANCE, PORTUGUESE, SPORTS, EVENTS, FAVORITES, GUIDE, CATEGORIES, SETTINGS }
 
 sealed interface Page {
     data object Loading : Page
@@ -78,4 +78,5 @@ sealed interface Page {
         val country: String? = null
     ) : Page
     data class Player(val channelId: String, val playlist: List<String>) : Page
+    data class Guide(val channelId: String, val playlist: List<String>) : Page
 }

@@ -15,3 +15,7 @@ captures/
 # Never commit credentials
 *.env
 secrets.*
+
+# Local agent state and manual QA captures
+.omo/
+qa/

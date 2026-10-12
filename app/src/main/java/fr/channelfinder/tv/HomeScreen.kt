@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -52,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
@@ -110,97 +112,103 @@ fun HomeScreen(state: AppState) {
     val favoriteChannels = state.favorites.mapNotNull(state.channelsById::get)
     val pinned = state.pinnedCategories.mapNotNull(state.categoriesById::get)
 
-    LazyColumn(
-        state = state.homeListState,
-        modifier = Modifier.fillMaxSize().onFocusChanged { homeHasFocus = it.hasFocus },
-        contentPadding = PaddingValues(top = Spacing.Top, bottom = 48.dp)
-    ) {
-        item(key = "header") {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = Spacing.Side),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(greeting().uppercase(), style = Type.Eyebrow, color = Palette.Accent)
-                    Spacer(Modifier.height(4.dp))
-                    Text("Qu’est-ce qu’on regarde ?", style = Type.Display, color = Palette.OnSurface)
-                }
-                Clock(style = Type.Headline)
-            }
-        }
-
-        item(key = "lanes") {
-            HomeRow(title = null) {
-                // Counted in the background (scanning 24k channels here froze Home after launch).
-                val (liveEvents, soonEvents) = state.eventCounts
-                // Counts match what the lane shows once opened, including the saved quality filter.
-                val quality = state.qualityFilter
-                // Null until the background pass has counted; the cards show plain totals meanwhile.
-                val qualityCounts = quality?.let { state.qualityLaneCounts[it] }
-                laneStyles.forEach { style ->
-                    LaneCard(
-                        style = style,
-                        count = if (style.lane == BrowseLane.EVENTS) {
-                            when {
-                                liveEvents > 0 -> "$liveEvents en cours"
-                                soonEvents > 0 -> "$soonEvents à venir"
-                                else -> "Voir les matchs"
-                            }
-                        } else if (qualityCounts != null && quality != null) {
-                            "${number.format(qualityCounts[style.lane.label] ?: 0)} en ${quality.label}"
-                        } else "${number.format(state.laneCounts[style.lane.label] ?: 0)} chaînes",
-                        modifier = Modifier.homeFocus("lane:${style.lane.name}")
-                    ) { state.openDestination(laneDest.getValue(style.lane)) }
-                }
-            }
-        }
-
-        if (recentChannels.isNotEmpty()) {
-            item(key = "recent") {
-                HomeRow(title = "Reprendre", subtitle = "Vos dernières chaînes") {
-                    recentChannels.take(ROW_LIMIT).forEach { channel ->
-                        ChannelCard(channel, isFavorite = channel.id in state.favorites, modifier = Modifier.homeFocus("recent:${channel.id}"),
-                            onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, recentChannels) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val cardWidth = (maxWidth - Spacing.Side * 2 - Spacing.Gutter * 3) / 4
+        LazyColumn(
+            state = state.homeListState,
+            modifier = Modifier.fillMaxSize().onFocusChanged { homeHasFocus = it.hasFocus },
+            contentPadding = PaddingValues(top = Spacing.Top, bottom = 48.dp)
+        ) {
+            item(key = "header") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = Spacing.Side),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(18.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(greeting().uppercase(), style = Type.Eyebrow, color = Palette.Accent)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Qu’est-ce qu’on regarde ?", style = Type.Display, color = Palette.OnSurface)
                     }
-                    // Récents has no drawer item: its full list (with "Retirer") opens from here.
-                    SeeAllCard(Modifier.homeFocus("recent:all")) { state.navigate(Page.Browse(BrowseLane.RECENT)) }
+                    Clock(style = Type.Headline)
                 }
             }
-        }
 
-        item(key = "favorites") {
-            HomeRow(title = "Mes favoris", subtitle = if (favoriteChannels.isEmpty()) null else "Appui long sur OK pour retirer") {
-                if (favoriteChannels.isEmpty()) {
-                    HintCard(Icons.Rounded.StarOutline, "Aucun favori pour l’instant", "Sur une chaîne, faites un appui long sur OK pour l’ajouter ici.")
-                } else {
-                    favoriteChannels.take(ROW_LIMIT).forEach { channel ->
-                        ChannelCard(channel, isFavorite = true, modifier = Modifier.homeFocus("fav:${channel.id}"),
-                            onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, favoriteChannels) }
+            item(key = "lanes") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = Spacing.Side, vertical = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)
+                ) {
+                    // Counted in the background (scanning 24k channels here froze Home after launch).
+                    val (liveEvents, soonEvents) = state.eventCounts
+                    // Counts match what the lane shows once opened, including the saved quality filter.
+                    val quality = state.qualityFilter
+                    // Null until the background pass has counted; the cards show plain totals meanwhile.
+                    val qualityCounts = quality?.let { state.qualityLaneCounts[it] }
+                    laneStyles.forEach { style ->
+                        LaneCard(
+                            style = style,
+                            count = if (style.lane == BrowseLane.EVENTS) {
+                                when {
+                                    liveEvents > 0 -> "$liveEvents en cours"
+                                    soonEvents > 0 -> "$soonEvents à venir"
+                                    else -> "Voir les matchs"
+                                }
+                            } else if (qualityCounts != null && quality != null) {
+                                "${number.format(qualityCounts[style.lane.label] ?: 0)} en ${quality.label}"
+                            } else "${number.format(state.laneCounts[style.lane.label] ?: 0)} chaînes",
+                            modifier = Modifier.weight(1f).homeFocus("lane:${style.lane.name}")
+                        ) { state.openDestination(laneDest.getValue(style.lane)) }
                     }
-                    if (favoriteChannels.size > ROW_LIMIT) SeeAllCard(Modifier.homeFocus("fav:all")) { state.openDestination(NavDest.FAVORITES) }
                 }
             }
-        }
 
-        item(key = "pinned") {
-            HomeRow(title = "Catégories épinglées", subtitle = if (pinned.isEmpty()) null else "Appui long sur OK pour retirer") {
-                pinned.forEach { category ->
-                    CategoryCard(
-                        category, number.format(state.categoryCounts[category.id] ?: 0),
-                        Modifier.homeFocus("cat:${category.id}"),
-                        onLongClick = { state.togglePin(category) }
-                    ) { state.navigate(Page.Browse(BrowseLane.ALL, categoryId = category.id)) }
+            if (recentChannels.isNotEmpty()) {
+                item(key = "recent") {
+                    HomeRow(title = "Reprendre", subtitle = "Vos dernières chaînes") {
+                        recentChannels.take(ROW_LIMIT).forEach { channel ->
+                            ChannelCard(channel, isFavorite = channel.id in state.favorites, width = cardWidth, modifier = Modifier.homeFocus("recent:${channel.id}"),
+                                onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, recentChannels) }
+                        }
+                        // Récents has no drawer item: its full list (with "Retirer") opens from here.
+                        SeeAllCard(Modifier.homeFocus("recent:all")) { state.navigate(Page.Browse(BrowseLane.RECENT)) }
+                    }
                 }
-                AddCategoryCard(Modifier.homeFocus("cat:add")) { state.openDestination(NavDest.CATEGORIES) }
             }
-        }
 
-        item(key = "hints") {
-            HintBar(
-                "OK" to "Ouvrir", "OK long" to "Favori / épingler", "◀" to "Menu",
-                modifier = Modifier.padding(start = Spacing.Side, top = 8.dp)
-            )
+            item(key = "favorites") {
+                HomeRow(title = "Mes favoris", subtitle = if (favoriteChannels.isEmpty()) null else "Appui long sur OK pour retirer") {
+                    if (favoriteChannels.isEmpty()) {
+                        HintCard(Icons.Rounded.StarOutline, "Aucun favori pour l’instant", "Sur une chaîne, faites un appui long sur OK pour l’ajouter ici.")
+                    } else {
+                        favoriteChannels.take(ROW_LIMIT).forEach { channel ->
+                            ChannelCard(channel, isFavorite = true, width = cardWidth, modifier = Modifier.homeFocus("fav:${channel.id}"),
+                                onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, favoriteChannels) }
+                        }
+                        if (favoriteChannels.size > ROW_LIMIT) SeeAllCard(Modifier.homeFocus("fav:all")) { state.openDestination(NavDest.FAVORITES) }
+                    }
+                }
+            }
+
+            item(key = "pinned") {
+                HomeRow(title = "Catégories épinglées", subtitle = if (pinned.isEmpty()) null else "Appui long sur OK pour retirer") {
+                    pinned.forEach { category ->
+                        CategoryCard(
+                            category, number.format(state.categoryCounts[category.id] ?: 0),
+                            Modifier.homeFocus("cat:${category.id}"),
+                            onLongClick = { state.togglePin(category) }
+                        ) { state.navigate(Page.Browse(BrowseLane.ALL, categoryId = category.id)) }
+                    }
+                    AddCategoryCard(Modifier.homeFocus("cat:add")) { state.openDestination(NavDest.CATEGORIES) }
+                }
+            }
+
+            item(key = "hints") {
+                HintBar(
+                    "OK" to "Ouvrir", "OK long" to "Favori / épingler", "◀" to "Menu",
+                    modifier = Modifier.padding(start = Spacing.Side, top = 8.dp)
+                )
+            }
         }
     }
 }
@@ -243,29 +251,29 @@ private fun HomeRow(
 
 @Composable
 private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClick: () -> Unit) {
-    CardSurface(onClick = onClick, modifier = modifier.size(width = 196.dp, height = 112.dp), container = style.colors.last()) {
+    CardSurface(onClick = onClick, modifier = modifier.heightIn(min = 112.dp), container = style.colors.last()) {
         Box(Modifier.fillMaxSize().background(Brush.linearGradient(style.colors))) {
             Text(
                 style.emoji, fontSize = 72.sp,
                 modifier = Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 18.dp).rotate(-12f).alpha(0.28f)
                     .clearAndSetSemantics { } // decorative: screen readers announce the emoji once
             )
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).align(Alignment.TopStart)) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 // With a larger system text size the title needs the room; the big faded emoji stays as the cue.
                 val roomy = LocalDensity.current.fontScale <= 1.15f
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (roomy) Text(style.emoji, fontSize = 20.sp)
-                    Text(style.lane.label, style = Type.Headline, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (roomy && style.lane != BrowseLane.EVENTS) Text(style.emoji, fontSize = 20.sp)
+                    Text(style.lane.label, style = Type.Title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f), maxLines = 1)
-            }
-            Row(
-                Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(count, style = Type.Label, color = Color.White)
-                Icon(Icons.Rounded.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(22.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(count, style = Type.Label, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Icon(Icons.Rounded.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                }
             }
         }
     }
@@ -273,10 +281,10 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
 
 
 @Composable
-fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    // 196 dp: four cards per row on the TV grid, so cards line up with the lane cards above them.
+fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, width: Dp, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+    // Four columns share the width remaining after the drawer and safe margins.
     // Height follows the text, so nothing is cut off with a larger system text size.
-    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.width(196.dp).heightIn(min = 136.dp)) {
+    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.width(width).heightIn(min = 136.dp)) {
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.fillMaxWidth().height(82.dp)) {
                 ChannelLogo(channel, Modifier.fillMaxSize(), corner = 0.dp, initialsSize = 22)
