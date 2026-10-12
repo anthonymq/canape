@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
@@ -56,7 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.Tracks
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
@@ -71,7 +77,15 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     val context = LocalContext.current
     val account = state.account ?: return
     val playlist = page.playlist.ifEmpty { listOf(page.channelId) }
-    val player = remember { buildStreamPlayer(context) }
+    val player = remember { buildStreamPlayer(context, fullScreen = true, audioLanguages = state.audioLanguages) }
+    // Leaving the app (Home button, another app, screensaver) stops the stream: nothing plays out of sight,
+    // and the provider's single connection is freed. Coming back reloads at the live point.
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val started = lifecycle.isAtLeast(Lifecycle.State.STARTED)
+    // Play/Pause on the remote (TV-PP). Live TV has no timeshift, so resuming returns to the live point.
+    var userPaused by remember { mutableStateOf(false) }
+    var tracksOpen by remember { mutableStateOf(false) }
+    var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
 
     var status by remember { mutableStateOf(PlayStatus.LOADING) }
@@ -94,6 +108,19 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     val shownChannel = state.channelsById[playlist[pendingIndex]] ?: state.channelsById[page.channelId] ?: return
 
     fun showBanner() { bannerVisible = true; bannerTick++ }
+    fun setPaused(paused: Boolean) {
+        if (status != PlayStatus.PLAYING || paused == userPaused) return
+        userPaused = paused
+        if (paused) {
+            player.pause()
+        } else {
+            player.seekToDefaultPosition()
+            player.play()
+        }
+        showBanner()
+    }
+    val hasTrackChoice = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }.sumOf { it.length } > 1 ||
+        tracks.groups.any { it.type == C.TRACK_TYPE_TEXT }
     fun zap(step: Int) {
         if (playlist.size < 2) { showBanner(); return }
         // Skip channels that just failed, unless every channel in the list did.
@@ -122,6 +149,8 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
 
             override fun onRenderedFirstFrame() { firstFrame = true }
 
+            override fun onTracksChanged(newTracks: Tracks) { tracks = newTracks }
+
             override fun onPlayerError(error: PlaybackException) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition()
@@ -147,7 +176,12 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
         }
     }
 
-    LaunchedEffect(page.channelId, attempt) {
+    LaunchedEffect(page.channelId, attempt, started) {
+        if (!started) {
+            player.stop()
+            return@LaunchedEffect
+        }
+        userPaused = false
         status = PlayStatus.LOADING
         firstFrame = false
         autoRetries = 0
@@ -171,8 +205,8 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             state.zapTo(target)
         }
     }
-    LaunchedEffect(bannerTick, status) {
-        if (status == PlayStatus.PLAYING) {
+    LaunchedEffect(bannerTick, status, userPaused) {
+        if (status == PlayStatus.PLAYING && !userPaused) {
             delay(5_000)
             bannerVisible = false
         }
@@ -187,14 +221,34 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             .focusRequester(rootFocus)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (tracksOpen) return@onPreviewKeyEvent false
                 when (event.key) {
+                    Key.MediaPlayPause -> { setPaused(!userPaused); true }
+                    Key.MediaPause -> { setPaused(true); true }
+                    Key.MediaPlay -> { setPaused(false); true }
+                    Key.LastChannel -> {
+                        val previous = state.previousChannelId?.takeIf { it in playlist || state.channelsById.containsKey(it) }
+                        if (previous != null) {
+                            playlist.indexOf(previous).takeIf { it >= 0 }?.let { pendingIndex = it }
+                            state.zapTo(previous)
+                            showBanner()
+                        }
+                        true
+                    }
                     Key.DirectionUp, Key.ChannelDown -> { zap(-1); true }
                     Key.DirectionDown, Key.ChannelUp -> { zap(1); true }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) false
+                        // OK resumes a paused stream (TV-PC); otherwise it shows or hides the channel banner.
+                        else if (userPaused) { setPaused(false); true }
                         else { if (bannerVisible) bannerVisible = false else showBanner(); true }
                     }
-                    Key.DirectionLeft, Key.DirectionRight, Key.Info, Key.Guide -> {
+                    Key.DirectionRight -> {
+                        if (status == PlayStatus.PLAYING && hasTrackChoice) { tracksOpen = true; true }
+                        else if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) false
+                        else { showBanner(); true }
+                    }
+                    Key.DirectionLeft, Key.Info, Key.Guide -> {
                         if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) false else { showBanner(); true }
                     }
                     else -> false
@@ -203,7 +257,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             .focusable()
     ) {
         AndroidView(
-            factory = { videoSurface(it).apply { this.player = player } },
+            factory = { videoSurface(it, keepAwake = true).apply { this.player = player } },
             update = { view -> if (view.player !== player) view.player = player },
             modifier = Modifier.fillMaxSize()
         )
@@ -277,17 +331,50 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
         ) {
             ChannelBanner(
                 channel = shownChannel,
+                paused = userPaused,
+                hasTrackChoice = hasTrackChoice && status == PlayStatus.PLAYING,
                 position = "${number.format(pendingIndex + 1)} / ${number.format(playlist.size)}",
                 isFavorite = shownChannel.id in state.favorites,
                 previous = if (playlist.size > 1) state.channelsById[playlist[(pendingIndex - 1 + playlist.size) % playlist.size]] else null,
                 next = if (playlist.size > 1) state.channelsById[playlist[(pendingIndex + 1) % playlist.size]] else null
             )
         }
+
+        if (userPaused) {
+            Box(
+                Modifier.align(Alignment.Center).padding(bottom = 120.dp).size(96.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Rounded.Pause, contentDescription = "En pause", tint = Color.White, modifier = Modifier.size(56.dp)) }
+        }
+
+        TracksPanel(
+            visible = tracksOpen,
+            tracks = tracks,
+            parameters = player.trackSelectionParameters,
+            onSelect = { parameters, language ->
+                player.trackSelectionParameters = parameters
+                state.rememberAudioLanguage(language)
+            },
+            onClose = {
+                tracksOpen = false
+                runCatching { rootFocus.requestFocus() }
+            },
+            modifier = Modifier.align(Alignment.CenterEnd)
+        )
     }
 }
 
 @Composable
-private fun ChannelBanner(channel: Channel, position: String, isFavorite: Boolean, previous: Channel?, next: Channel?) {
+private fun ChannelBanner(
+    channel: Channel,
+    paused: Boolean,
+    hasTrackChoice: Boolean,
+    position: String,
+    isFavorite: Boolean,
+    previous: Channel?,
+    next: Channel?
+) {
     Column(
         Modifier.fillMaxWidth()
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f), Color.Black.copy(alpha = 0.92f))))
@@ -298,12 +385,14 @@ private fun ChannelBanner(channel: Channel, position: String, isFavorite: Boolea
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
-                        Modifier.background(Palette.Live, RoundedCornerShape(6.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
+                        Modifier.background(if (paused) Palette.Surface2 else Palette.Live, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Box(Modifier.size(7.dp).background(Color.White, CircleShape))
-                        Text("EN DIRECT", style = Type.Badge, color = Color.White)
+                        if (paused) Icon(Icons.Rounded.Pause, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                        else Box(Modifier.size(7.dp).background(Color.White, CircleShape))
+                        Text(if (paused) "EN PAUSE" else "EN DIRECT", style = Type.Badge, color = Color.White)
                     }
                     EventTag(channel)
                     Text(position, style = Type.Label, color = Palette.Muted)
@@ -325,7 +414,8 @@ private fun ChannelBanner(channel: Channel, position: String, isFavorite: Boolea
             if (previous != null) HintBar("▲" to previous.displayName)
             if (next != null) HintBar("▼" to next.displayName)
             Spacer(Modifier.weight(1f))
-            HintBar("OK" to "Masquer", "RETOUR" to "Liste")
+            if (hasTrackChoice) HintBar("▶" to "Audio et sous-titres")
+            HintBar(if (paused) "OK" to "Reprendre le direct" else "OK" to "Masquer", "RETOUR" to "Liste")
         }
     }
 }

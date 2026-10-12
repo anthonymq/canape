@@ -68,6 +68,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
@@ -384,6 +387,13 @@ private fun ChannelRow(
                 }
             }
             if (isFavorite) Icon(Icons.Rounded.Star, contentDescription = "Favori", tint = if (focused) Palette.GoldOnLight else Palette.Gold, modifier = Modifier.size(24.dp))
+            // Lists guideline: an indicator, not only a background colour, marks the row shown in the preview.
+            if (isPreviewing) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = Palette.Accent, modifier = Modifier.size(18.dp))
+                    Text("Aperçu", style = Type.Caption, color = Palette.Accent)
+                }
+            }
         }
     }
 }
@@ -400,6 +410,10 @@ private fun PreviewPane(
     modifier: Modifier
 ) {
     val notStarted = ChannelText.notStartedYet(channel.event)
+    // No preview while the app is in the background (Home button, screensaver): it would use the provider's
+    // single connection for nothing. It restarts when the viewer comes back.
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val started = lifecycle.isAtLeast(Lifecycle.State.STARTED)
     val context = LocalContext.current
     val account = state.account ?: return
     val player = remember { buildStreamPlayer(context) }
@@ -454,14 +468,14 @@ private fun PreviewPane(
     }
 
     // Start the stream only once focus settles, so fast D-pad movement does not open a stream per row.
-    LaunchedEffect(channel.id, account, retry) {
+    LaunchedEffect(channel.id, account, retry, started) {
         loadedFor = null
         if (retry == 0) report(PreviewState.WAITING)
         player.playWhenReady = false
         player.stop()
         player.clearMediaItems()
         // An event feed is empty before kickoff: show when it starts instead of opening a stream.
-        if (notStarted) return@LaunchedEffect
+        if (notStarted || !started) return@LaunchedEffect
         delay(if (retry == 0) 650L else 1_500L * retry)
         player.setMediaItem(MediaItem.fromUri(state.repository.streamUrl(account, channel)))
         loadedFor = channel.id

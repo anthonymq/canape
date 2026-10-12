@@ -95,6 +95,25 @@ When returning from full-screen playback, restore the selected channel and list 
 
 Media3/ExoPlayer plays the selected live stream with sound; there is no seek bar (live TV). A channel banner (logo, name, badges, position in list, clock, previous/next channel) shows on start and on any key, and hides after 5 s; OK toggles it. Up/Down (and CH+/CH−) zap through the list the channel was opened from; the banner follows immediately and the stream switches once the viewer pauses (500 ms). A failed stream is retried once silently; then a card explains the failure in plain language (HTTP 407, 404, connection limits, unsupported format…) with **Réessayer** and **Chaîne suivante**. Back returns to the previous screen (an in-app back stack) with the last watched channel selected.
 
+### Android TV design guide and quality checklist (reviewed 2026-10-12)
+
+The whole TV design guide (foundations, system, styles, components), the TV app quality checklist and the TV accessibility guide were reviewed against the app.
+
+| Guideline | How the app meets it |
+| --- | --- |
+| TV-PP / TV-PC (playback keys) | Play/Pause, Play and Pause keys pause the stream ("EN PAUSE" + pause icon); OK or Play resumes **at the live point** (no timeshift on live IPTV). OK otherwise toggles the channel banner, the usual live-TV behaviour; Left/Right seeking does not apply to live streams. |
+| TV-NP (playback after leaving) | Leaving the app (Home, another app, screensaver) stops the full-screen stream and the preview, which also frees the account's single provider connection; returning reloads at the live point. No "Now playing" card is needed because nothing plays in the background. |
+| TV-BU / TV-BY (screen sleep) | Only full-screen playback keeps the TV awake; the muted browsing preview does not block the screensaver. |
+| Audio | Full-screen playback takes audio focus (the Assistant and other apps duck or pause it) and pauses when the audio output disconnects. Preferred audio languages: the viewer's last choice, then French, then Portuguese. |
+| Lists guideline | Single-choice lists use radio indicators. The row shown in the preview carries an "▶ Aperçu" indicator, not only a background colour. |
+| Buttons guideline | One main action per screen as a filled button, placed first; secondary actions outlined; focused buttons grow 1.1×. |
+| Cards / layout grid | Home cards are 196 dp (four per row) with 20 dp gaps, so all rows line up. |
+| Accessibility (text scaling) | Verified at 130 % system text size: cards grow with their text and lane titles drop their small emoji instead of clipping. Text size, theme, density and locale changes no longer restart the app. |
+| TV-SB (search) | In-app search from the drawer and each list. The remote's search/mic key is handled by Google TV itself and never reaches the app. |
+| Not applicable | Featured carousel and immersive list need large artwork (the provider only supplies small logos). Watch Next / Live tab are not used: Google TV does not show app channel rows and Watch Next targets resumable on-demand content. |
+
+In full screen, **▶** opens **Audio et sous-titres** when the stream has more than one audio track or any subtitles; the remote's **Last channel** key returns to the previous channel.
+
 ## Functional requirements
 
 | ID | Requirement | Current status |

@@ -82,6 +82,17 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     )
         private set
 
+    /** Audio languages to prefer, most wanted first: the viewer's last choice, then French and Portuguese. */
+    val audioLanguages: List<String>
+        get() = (listOfNotNull(prefs.getString("audio_language", null)) + listOf("fr", "pt")).distinct()
+
+    fun rememberAudioLanguage(language: String?) {
+        if (!language.isNullOrBlank() && language != "und") prefs.edit().putString("audio_language", language).apply()
+    }
+
+    /** Channel watched before the current one, for the remote's "last channel" key. */
+    var previousChannelId by mutableStateOf<String?>(null)
+
     fun setQuality(quality: ChannelText.VideoQuality?) {
         qualityFilter = quality
         prefs.edit().putString("quality_filter", quality?.name).apply()
@@ -424,6 +435,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
 
     fun zapTo(channelId: String) {
         val current = page as? Page.Player ?: return
+        if (current.channelId != channelId) previousChannelId = current.channelId
         rememberWatched(channelId)
         replaceTop(current.copy(channelId = channelId))
     }

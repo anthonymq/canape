@@ -282,8 +282,11 @@ fun TvButton(
         interactionSource = interaction,
         modifier = modifier.heightIn(min = 42.dp),
         shape = CircleShape,
-        container = if (primary) Palette.AccentDeep else Palette.Surface2,
-        outline = if (primary) Palette.Accent.copy(alpha = 0.6f) else Palette.Outline,
+        // TV buttons guideline: the main action is a filled button, others are outlined; focus grows 1.1×.
+        container = if (primary) Palette.Accent else Color.Transparent,
+        content = if (primary) Palette.OnFocus else Palette.OnSurface,
+        outline = if (primary) null else Palette.Faint,
+        focusedScale = 1.1f,
         enabled = enabled
     ) {
         Row(

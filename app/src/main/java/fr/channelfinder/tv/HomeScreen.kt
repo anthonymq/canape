@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -252,9 +254,11 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
                     .clearAndSetSemantics { } // decorative: screen readers announce the emoji once
             )
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).align(Alignment.TopStart)) {
+                // With a larger system text size the title needs the room; the big faded emoji stays as the cue.
+                val roomy = LocalDensity.current.fontScale <= 1.15f
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(style.emoji, fontSize = 20.sp)
-                    Text(style.lane.label, style = Type.Headline, color = Color.White, maxLines = 1)
+                    if (roomy) Text(style.emoji, fontSize = 20.sp)
+                    Text(style.lane.label, style = Type.Headline, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f), maxLines = 1)
             }
@@ -273,9 +277,11 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
 
 @Composable
 fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.size(width = 160.dp, height = 122.dp)) {
-        Column(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxWidth().height(70.dp)) {
+    // 196 dp: four cards per row on the TV grid, so cards line up with the lane cards above them.
+    // Height follows the text, so nothing is cut off with a larger system text size.
+    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.width(196.dp).heightIn(min = 136.dp)) {
+        Column(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().height(82.dp)) {
                 ChannelLogo(channel, Modifier.fillMaxSize(), corner = 0.dp, initialsSize = 22)
                 if (isFavorite) {
                     Icon(
@@ -327,7 +333,7 @@ private fun AddCategoryCard(modifier: Modifier, onClick: () -> Unit) {
 
 @Composable
 private fun SeeAllCard(modifier: Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.size(width = 122.dp, height = 122.dp), container = Palette.Ink, outline = Palette.Outline) {
+    FocusSurface(onClick = onClick, modifier = modifier.size(width = 136.dp, height = 136.dp), container = Palette.Ink, outline = Palette.Outline) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(30.dp))
             Spacer(Modifier.height(8.dp))

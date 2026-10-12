@@ -3,6 +3,8 @@ package fr.channelfinder.tv
 import android.content.Context
 import android.view.ViewGroup
 import androidx.annotation.OptIn
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -16,25 +18,49 @@ import androidx.media3.ui.PlayerView
 // so identify as a widely accepted IPTV player and follow redirects to the stream servers.
 private const val STREAM_USER_AGENT = "VLC/3.0.21 LibVLC/3.0.21"
 
-fun buildStreamPlayer(context: Context): ExoPlayer {
+/**
+ * @param fullScreen the full-screen player takes audio focus (ducks/pauses for the Assistant and other
+ * apps) and pauses when the audio output disconnects; the muted preview does neither.
+ * @param audioLanguages preferred audio languages, most wanted first (ISO 639 codes).
+ */
+fun buildStreamPlayer(context: Context, fullScreen: Boolean = false, audioLanguages: List<String> = emptyList()): ExoPlayer {
     val httpFactory = DefaultHttpDataSource.Factory()
         .setUserAgent(STREAM_USER_AGENT)
         .setAllowCrossProtocolRedirects(true)
         .setConnectTimeoutMs(15_000)
         .setReadTimeoutMs(30_000)
-    return ExoPlayer.Builder(context)
+    val player = ExoPlayer.Builder(context)
         .setMediaSourceFactory(DefaultMediaSourceFactory(context).setDataSourceFactory(httpFactory))
+        .apply {
+            if (fullScreen) {
+                setAudioAttributes(
+                    AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
+                    /* handleAudioFocus = */ true
+                )
+                setHandleAudioBecomingNoisy(true)
+            }
+        }
         .build()
+    if (audioLanguages.isNotEmpty()) {
+        player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
+            .setPreferredAudioLanguages(*audioLanguages.toTypedArray())
+            .build()
+    }
+    return player
 }
 
-/** A bare video surface: no Media3 controls (live TV has nothing to seek) and never focusable. */
+/**
+ * A bare video surface: no Media3 controls (live TV has nothing to seek) and never focusable.
+ * Only full-screen playback keeps the TV awake; a preview the viewer did not start must not block the
+ * screensaver (TV quality criteria TV-BU / TV-BY).
+ */
 @OptIn(UnstableApi::class)
-fun videoSurface(context: Context): PlayerView = PlayerView(context).apply {
+fun videoSurface(context: Context, keepAwake: Boolean = false): PlayerView = PlayerView(context).apply {
     useController = false
     resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
     setShutterBackgroundColor(android.graphics.Color.BLACK)
     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-    keepScreenOn = true
+    keepScreenOn = keepAwake
     isFocusable = false
     isFocusableInTouchMode = false
     descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
