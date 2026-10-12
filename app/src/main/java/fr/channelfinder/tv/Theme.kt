@@ -38,8 +38,11 @@ object Palette {
 object Spacing {
     val Side = 58.dp      // TV layout grid margin
     val Top = 28.dp       // 5% overscan-safe top/bottom
-    val Gutter = 20.dp
-    val Row = 28.dp       // between home rows
+    val Gutter = 12.dp
+    val Row = 16.dp       // between home rows
+    val ListGap = 4.dp
+    val ListPadding = 4.dp
+    val ChannelArtwork = 54.dp
 }
 
 object Type {

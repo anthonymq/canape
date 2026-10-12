@@ -128,8 +128,8 @@ fun CategoryPickerScreen(state: AppState, page: Page.CategoryPicker) {
             LazyColumn(
                 state = state.categoryListState,
                 modifier = Modifier.fillMaxWidth().weight(1f).focusRestorer(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                contentPadding = PaddingValues(vertical = 6.dp, horizontal = 10.dp)
+                verticalArrangement = Arrangement.spacedBy(Spacing.ListGap),
+                contentPadding = PaddingValues(vertical = Spacing.ListPadding, horizontal = 10.dp)
             ) {
                 items(items, key = { it.key }) { item ->
                     when (item) {
@@ -169,11 +169,11 @@ private fun CategoryRow(
         FocusSurface(
             onClick = onOpen,
             onLongClick = onTogglePin,
-            modifier = modifier.weight(1f).heightIn(min = 50.dp).onFocusChanged { if (it.isFocused) onFocus() },
+            modifier = modifier.weight(1f).heightIn(min = 46.dp).onFocusChanged { if (it.isFocused) onFocus() },
             focusedScale = 1.02f
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {

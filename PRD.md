@@ -1,6 +1,6 @@
 # Easy IPTV Product Requirements
 
-_Last updated: 2026-10-12 (TV guide)_
+_Last updated: 2026-10-12 (compact browsing layout)_
 
 ## Product summary
 
@@ -49,6 +49,8 @@ Browsing screens (Accueil, lanes, search, Catégories, Réglages) sit in a modal
 Back follows the guideline for side navigation: on a screen opened from the drawer, Back (after returning a scrolled list to the top) opens the drawer on that screen's item; Back in the drawer goes to Accueil; on Accueil, Back opens the drawer and a further Back leaves the app. Sub-pages (a category opened from the picker, Récents) return to the screen they came from. Each list's own search field searches only that list ("Rechercher dans France").
 
 ### Home
+
+Compact layout verified on the 1080p Google TV emulator: five complete channel cards fit across Home instead of four, with 54 dp artwork, shorter destination cards and 12 dp gutters. Browser, guide and category lists use tighter padding and 4 dp row gaps. Typography and TV safe margins remain unchanged; rows grow with programme summaries and enlarged text. Home, browser live preview, guide and Categories were inspected with D-pad navigation; Home, guide and Categories were also inspected at 130% font scale. Physical-TV readability remains unverified.
 
 Home should answer “what can I watch quickly?” It is a vertical stack of rows: four lane cards (France, Português, Sports, Événements), **Reprendre** (recent channels with logos, OK plays directly, ending with "Tout voir"), **Mes favoris**, and **Catégories épinglées**. Search, Favoris, Catégories and Réglages are in the drawer. The France card has focus when Home opens; returning to Home restores the last focused card. Back from anywhere below the first card scrolls to the top and focuses France; Back from France leaves the app (no confirmation).
 

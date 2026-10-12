@@ -113,7 +113,7 @@ fun HomeScreen(state: AppState) {
     val pinned = state.pinnedCategories.mapNotNull(state.categoriesById::get)
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val cardWidth = (maxWidth - Spacing.Side * 2 - Spacing.Gutter * 3) / 4
+        val cardWidth = (maxWidth - Spacing.Side * 2 - Spacing.Gutter * 4) / 5
         LazyColumn(
             state = state.homeListState,
             modifier = Modifier.fillMaxSize().onFocusChanged { homeHasFocus = it.hasFocus },
@@ -136,7 +136,7 @@ fun HomeScreen(state: AppState) {
 
             item(key = "lanes") {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = Spacing.Side, vertical = 20.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = Spacing.Side, vertical = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)
                 ) {
                     // Counted in the background (scanning 24k channels here froze Home after launch).
@@ -227,7 +227,7 @@ private fun greeting(): String {
 private fun HomeRow(
     title: String?,
     subtitle: String? = null,
-    topPadding: androidx.compose.ui.unit.Dp = 10.dp,
+    topPadding: androidx.compose.ui.unit.Dp = 6.dp,
     content: @Composable () -> Unit
 ) {
     Column(Modifier.fillMaxWidth().padding(top = topPadding)) {
@@ -251,7 +251,7 @@ private fun HomeRow(
 
 @Composable
 private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClick: () -> Unit) {
-    CardSurface(onClick = onClick, modifier = modifier.heightIn(min = 112.dp), container = style.colors.last()) {
+    CardSurface(onClick = onClick, modifier = modifier.heightIn(min = 88.dp), container = style.colors.last()) {
         Box(Modifier.fillMaxSize().background(Brush.linearGradient(style.colors))) {
             Text(
                 style.emoji, fontSize = 72.sp,
@@ -266,7 +266,7 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
                     Text(style.lane.label, style = Type.Title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(22.dp))
+                Spacer(Modifier.height(8.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -282,11 +282,11 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
 
 @Composable
 fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, width: Dp, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    // Four columns share the width remaining after the drawer and safe margins.
+    // Five columns share the width remaining after the drawer and safe margins.
     // Height follows the text, so nothing is cut off with a larger system text size.
-    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.width(width).heightIn(min = 136.dp)) {
+    CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.width(width).heightIn(min = 108.dp)) {
         Column(Modifier.fillMaxWidth()) {
-            Box(Modifier.fillMaxWidth().height(82.dp)) {
+            Box(Modifier.fillMaxWidth().height(Spacing.ChannelArtwork)) {
                 ChannelLogo(channel, Modifier.fillMaxSize(), corner = 0.dp, initialsSize = 22)
                 if (isFavorite) {
                     Icon(
@@ -338,7 +338,7 @@ private fun AddCategoryCard(modifier: Modifier, onClick: () -> Unit) {
 
 @Composable
 private fun SeeAllCard(modifier: Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.size(width = 136.dp, height = 136.dp), container = Palette.Ink, outline = Palette.Outline) {
+    FocusSurface(onClick = onClick, modifier = modifier.size(width = 108.dp, height = 108.dp), container = Palette.Ink, outline = Palette.Outline) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Rounded.ArrowForward, contentDescription = null, modifier = Modifier.size(30.dp))
             Spacer(Modifier.height(8.dp))

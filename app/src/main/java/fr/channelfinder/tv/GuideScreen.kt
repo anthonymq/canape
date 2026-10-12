@@ -74,7 +74,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
         Spacer(Modifier.height(Spacing.Gutter))
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
             LazyColumn(Modifier.width(200.dp).fillMaxHeight().onFocusChanged { if (it.hasFocus) actionLabel = "Choisir" }, state = channelList,
-                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = Spacing.ListPadding), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
                 items(channels, key = Channel::id) { item ->
                     val active = item.id == channel.id
                     FocusSurface(onClick = { if (active) runCatching { if (programmes?.isNotEmpty() == true || error != null) programmeFocus.requestFocus() else watchFocus.requestFocus() }
@@ -83,7 +83,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                             .focusProperties { right = if (active && (programmes?.isNotEmpty() == true || error != null)) programmeFocus else watchFocus }
                             .onFocusChanged { if (it.isFocused && !active) state.replaceTop(page.copy(channelId = item.id)) },
                         container = if (active) Palette.AccentDeep else Palette.Surface1, focusedScale = 1.02f) {
-                        Row(Modifier.heightIn(min = 56.dp).padding(10.dp), verticalAlignment = Alignment.CenterVertically,
+                        Row(Modifier.heightIn(min = 56.dp).padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             ChannelLogo(item, Modifier.size(42.dp, 32.dp), initialsSize = 14)
                             Column(Modifier.weight(1f)) {
@@ -120,7 +120,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                     }
                 } else {
                     LazyColumn(Modifier.fillMaxWidth().weight(1f).onFocusChanged { if (it.hasFocus) actionLabel = "Direct" }, state = scheduleList,
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = Spacing.ListPadding), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
                         items(rows, key = TvProgramme::key) { programme ->
                             val active = selected?.key == programme.key
                             FocusSurface(onClick = ::watch,
@@ -128,7 +128,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                                     .focusProperties { left = currentFocus; right = watchFocus }
                                     .onFocusChanged { if (it.isFocused) selected = programme },
                                 container = if (active) Palette.AccentDeep else Palette.Surface1, focusedScale = 1.02f) {
-                                Column(Modifier.heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                Column(Modifier.heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 6.dp)) {
                                     Text("${programme.dayLabel()} · ${programme.timeLabel()}", style = Type.Badge)
                                     Text(programme.title, style = Type.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     if (programme.isLive(now)) Text("EN COURS", style = Type.Badge)

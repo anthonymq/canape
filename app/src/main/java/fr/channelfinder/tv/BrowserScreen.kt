@@ -270,8 +270,8 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                     modifier = Modifier.weight(1.12f).fillMaxHeight()
                         .onFocusChanged { listHasFocus = it.hasFocus }
                         .focusRestorer(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    contentPadding = PaddingValues(vertical = 6.dp, horizontal = 10.dp)
+                    verticalArrangement = Arrangement.spacedBy(Spacing.ListGap),
+                    contentPadding = PaddingValues(vertical = Spacing.ListPadding, horizontal = 10.dp)
                 ) {
                     // Événements: day sections (En cours, Aujourd’hui, Demain…), like the Catégories sections.
                     val sectioned = page.lane == BrowseLane.EVENTS && page.categoryId == null && page.query.isBlank()
@@ -413,11 +413,10 @@ private fun ChannelRow(
         interactionSource = interaction,
         modifier = modifier.fillMaxWidth().heightIn(min = 56.dp).onFocusChanged { if (it.isFocused) onFocus() },
         container = if (isPreviewing) Palette.AccentDeep else Palette.Surface1,
-        outline = if (isPreviewing) Palette.Accent else null,
         focusedScale = 1.03f
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = Spacing.ListPadding),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
