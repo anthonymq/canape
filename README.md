@@ -28,7 +28,9 @@ See `AGENTS.md` for the toolchain (JDK 17, AGP 9.4.1, compileSdk 37), build, and
 
 ## Download a Google TV APK
 
-The [Google TV APK workflow](https://github.com/anthonymq/easy-iptv/actions/workflows/google-tv-apk.yml) runs on pushes and pull requests to `main`, and can also be started with **Run workflow**. It runs unit tests and builds the app using JDK 17 and Android SDK 37.
+The [Google TV APK workflow](https://github.com/anthonymq/easy-iptv/actions/workflows/google-tv-apk.yml) runs on pushes and pull requests to `main`, version tags (`v*`), and **Run workflow**. It runs unit tests and builds the app using JDK 17 and Android SDK 37.
+
+Pushing a version tag automatically publishes a GitHub prerelease with the tested APK attached. For example, after updating the app version and committing it, run `git tag v0.1.1` and `git push origin v0.1.1`. Release downloads are available on the [Releases page](https://github.com/anthonymq/easy-iptv/releases) without extracting a CI artifact ZIP. Rerunning a tag build replaces that release's APK. Main-branch and pull-request builds produce CI artifacts only. Only the tag release job receives write permissions; no additional token or signing secret is required.
 
 Open a successful run and download the **easy-iptv-google-tv** artifact. Unzip it to get `easy-iptv-google-tv.apk`, then sideload it on an Android TV or Google TV device (Android 6.0 or newer):
 
