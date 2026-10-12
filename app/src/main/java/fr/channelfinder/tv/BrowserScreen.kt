@@ -1,5 +1,8 @@
 package fr.channelfinder.tv
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SearchOff
 import androidx.compose.material.icons.rounded.Star
@@ -67,6 +71,7 @@ import androidx.media3.common.Player
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -83,14 +88,16 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
     val category = page.categoryId?.let(state.categoriesById::get)
     // Favorites/recents are captured when the list opens so un-starring a row does not yank focus away.
-    val base = remember(state.channels, page.lane, page.categoryId) { state.channelsFor(page.lane, page.categoryId) }
+    // Récents is the exception: removing one from the preview must update the list.
+    val recentKey = if (page.lane == BrowseLane.RECENT && page.categoryId == null) state.recent.toList() else null
+    val base = remember(state.channels, page.lane, page.categoryId, recentKey) { state.channelsFor(page.lane, page.categoryId) }
     // Events rarely carry a quality tag, and favorites/recents are the viewer's own picks: no quality filter there.
     val qualityApplies = page.categoryId != null || page.lane !in qualityExemptLanes
     val quality = if (qualityApplies) state.qualityFilter else null
     // Country filter: offered when the list mixes at least two countries with two channels or more each.
     // A country gets a chip only with a real share of the list (5%, at least 2 channels), so a few
     // stray channels do not add chips that overflow the row.
-    val countries = remember(base) {
+    val countries = if (!qualityApplies) emptyList() else remember(base) {
         val minimum = maxOf(2, base.size / 20)
         base.groupingBy { it.country }.eachCount()
             .filter { (code, count) -> code != null && count >= minimum }
@@ -113,6 +120,19 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val qualityFocus = remember { (listOf<ChannelText.VideoQuality?>(null) + ChannelText.VideoQuality.entries).associateWith { FocusRequester() } }
     var editing by remember { mutableStateOf(page.startSearch) }
     var listHasFocus by remember { mutableStateOf(false) }
+
+    // TV guideline: Back first returns to the top of a scrolled list, a second Back leaves.
+    // Registered before the search field's handler, so Back while typing still ends editing first.
+    val scope = rememberCoroutineScope()
+    val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
+    BackHandler(enabled = scrolled && results.isNotEmpty()) {
+        scope.launch {
+            state.selectedChannelId = results.first().id
+            listState.scrollToItem(0)
+            delay(32)
+            runCatching { selectedRowFocus.requestFocus() }
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (page.startSearch) {
@@ -147,15 +167,16 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
         page.lane == BrowseLane.ALL -> "Toutes les chaînes"
         else -> page.lane.label
     }
+    val noun = if (page.lane == BrowseLane.EVENTS && page.categoryId == null) "événement" else "chaîne"
+    val countLabel = listOfNotNull(
+        "${number.format(results.size)} $noun${plural(results.size)}",
+        quality?.let { "en ${it.label}" },
+        country?.let(ChannelText::countryName)
+    ).joinToString(" · ").replace(" · en ", " en ")
     val eyebrow = when {
-        category != null -> listOfNotNull("Catégorie", category.countryTag).joinToString(" · ")
+        category != null && page.query.isBlank() -> listOfNotNull("Catégorie", category.countryTag, countLabel).joinToString(" · ")
         page.query.isNotBlank() -> "${number.format(results.size)} résultat${plural(results.size)} pour « ${page.query.trim()} »"
-        quality != null || country != null -> listOfNotNull(
-            "${number.format(results.size)} chaîne${plural(results.size)}",
-            quality?.let { "en ${it.label}" },
-            country?.let(ChannelText::countryName)
-        ).joinToString(" · ").replace(" · en ", " en ")
-        else -> "${number.format(results.size)} chaîne${plural(results.size)}"
+        else -> countLabel
     }
 
     Column(Modifier.fillMaxSize().padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.Top, bottom = 20.dp)) {
@@ -256,7 +277,8 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                         ChannelRow(
                             channel = channel,
                             // The group name only where it changes; the preview always shows it.
-                            showCategory = index == 0 || results[index - 1].categoryDisplay != channel.categoryDisplay,
+                            showCategory = page.categoryId == null &&
+                                (index == 0 || results[index - 1].categoryDisplay != channel.categoryDisplay),
                             isFavorite = channel.id in state.favorites,
                             isUnavailable = state.isUnavailable(channel.id),
                             isPreviewing = isSelected && !listHasFocus,
@@ -276,6 +298,14 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                         isFavorite = selected.id in state.favorites,
                         onWatch = { state.play(selected, results) },
                         onToggleFavorite = { state.toggleFavorite(selected) },
+                        onRemoveRecent = if (page.lane == BrowseLane.RECENT && page.categoryId == null) {
+                            {
+                                // Keep the viewer's place: the next row (or the previous one at the end) takes over.
+                                val index = results.indexOfFirst { it.id == selected.id }
+                                state.selectedChannelId = (results.getOrNull(index + 1) ?: results.getOrNull(index - 1))?.id
+                                state.removeRecent(selected)
+                            }
+                        } else null,
                         watchFocus = watchFocus,
                         modifier = Modifier.weight(0.88f).fillMaxHeight()
                     )
@@ -377,9 +407,11 @@ private fun PreviewPane(
     isFavorite: Boolean,
     onWatch: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onRemoveRecent: (() -> Unit)?,
     watchFocus: FocusRequester,
     modifier: Modifier
 ) {
+    val notStarted = ChannelText.notStartedYet(channel.event)
     val context = LocalContext.current
     val account = state.account ?: return
     val player = remember { buildStreamPlayer(context) }
@@ -393,7 +425,12 @@ private fun PreviewPane(
     LaunchedEffect(channel.id) { retry = 0 }
     val currentChannel by rememberUpdatedState(channel)
 
+    // The stream that is actually loaded. The player can report READY for the old stream after focus has
+    // moved on (or after stop()); such reports must not mark the newly selected channel as live.
+    var loadedFor by remember { mutableStateOf<String?>(null) }
+
     fun report(newState: PreviewState) {
+        if (newState != PreviewState.WAITING && loadedFor != currentChannel.id) return
         reportedState = newState
         reportedFor = currentChannel.id
     }
@@ -402,7 +439,10 @@ private fun PreviewPane(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_READY -> { report(PreviewState.READY); state.markWorking(currentChannel.id) }
+                    Player.STATE_READY -> if (player.currentMediaItem != null && loadedFor == currentChannel.id) {
+                        report(PreviewState.READY)
+                        state.markWorking(currentChannel.id)
+                    }
                     Player.STATE_BUFFERING -> if (previewState != PreviewState.READY) report(PreviewState.BUFFERING)
                     else -> Unit
                 }
@@ -427,12 +467,16 @@ private fun PreviewPane(
 
     // Start the stream only once focus settles, so fast D-pad movement does not open a stream per row.
     LaunchedEffect(channel.id, account, retry) {
+        loadedFor = null
         if (retry == 0) report(PreviewState.WAITING)
         player.playWhenReady = false
         player.stop()
         player.clearMediaItems()
+        // An event feed is empty before kickoff: show when it starts instead of opening a stream.
+        if (notStarted) return@LaunchedEffect
         delay(if (retry == 0) 650L else 1_500L * retry)
         player.setMediaItem(MediaItem.fromUri(state.repository.streamUrl(account, channel)))
+        loadedFor = channel.id
         player.volume = 0f
         if (retry == 0) report(PreviewState.BUFFERING)
         player.playWhenReady = true
@@ -454,7 +498,14 @@ private fun PreviewPane(
             )
             if (overlayAlpha > 0f) {
                 Box(Modifier.fillMaxSize().alpha(overlayAlpha).background(Brush.verticalGradient(listOf(Palette.Surface2, Palette.Ink))), contentAlignment = Alignment.Center) {
-                    if (previewState == PreviewState.ERROR) {
+                    if (notStarted) {
+                        Column(Modifier.padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Rounded.Schedule, contentDescription = null, tint = Palette.Accent, modifier = Modifier.size(34.dp))
+                            Spacer(Modifier.height(8.dp))
+                            Text(channel.event?.let(ChannelText::eventStartSentence).orEmpty(), style = Type.Label, color = Palette.OnSurface, textAlign = TextAlign.Center)
+                            Text("L’aperçu démarrera au début du direct.", style = Type.Caption, color = Palette.Muted, textAlign = TextAlign.Center)
+                        }
+                    } else if (previewState == PreviewState.ERROR) {
                         Column(Modifier.padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Rounded.ErrorOutline, contentDescription = null, tint = Palette.Error, modifier = Modifier.size(34.dp))
                             Spacer(Modifier.height(8.dp))
@@ -504,6 +555,7 @@ private fun PreviewPane(
                 icon = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline,
                 iconTint = if (isFavorite) Palette.Gold else null
             )
+            if (onRemoveRecent != null) TvButton("Retirer", onRemoveRecent, icon = Icons.Rounded.Clear)
         }
 
     }

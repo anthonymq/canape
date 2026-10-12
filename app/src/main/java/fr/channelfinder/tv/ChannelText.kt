@@ -62,7 +62,7 @@ object ChannelText {
 
     /** Category labels repeat across thousands of channels, so parse each one once. */
     fun categoryLabel(raw: String): Label = categoryLabels.getOrPut(raw) {
-        parseLabel(raw).let { label -> categorySuffixes[raw]?.let { label.copy(title = label.title + it) } ?: label }
+        parseLabel(raw, keepQuality = true).let { label -> categorySuffixes[raw]?.let { label.copy(title = label.title + it) } ?: label }
     }
 
     /**
@@ -74,7 +74,7 @@ object ChannelText {
         val seen = HashMap<String, Int>()
         val suffixes = HashMap<String, String>()
         names.forEach { raw ->
-            val label = parseLabel(raw)
+            val label = parseLabel(raw, keepQuality = true)
             val key = "${label.country}|${normalize(label.title)}"
             val copy = (seen[key] ?: 0) + 1
             seen[key] = copy
@@ -84,7 +84,11 @@ object ChannelText {
         categoryLabels.clear()
     }
 
-    fun parseLabel(raw: String): Label {
+    /**
+     * Group names keep their quality words ("PORTUGAL HEVC" and "PORTUGAL" are different groups);
+     * channel names lose them in favour of badges.
+     */
+    fun parseLabel(raw: String, keepQuality: Boolean = false): Label {
         var text = raw.trim()
         var country: String? = null
         countryPrefix.find(text)?.let { match ->
@@ -104,7 +108,8 @@ object ChannelText {
             .replace(leadingJunk, "")
             .replace(spaces, " ")
             .trim()
-        val title = stripped.ifBlank { text.replace(trailingJunk, "").trim().ifBlank { raw.trim() } }
+        val kept = text.replace(trailingJunk, "").replace(leadingJunk, "").replace(spaces, " ").trim()
+        val title = (if (keepQuality) kept else stripped).ifBlank { kept.ifBlank { raw.trim() } }
         return Label(title, country, if (stripped.isBlank()) emptyList() else badges.toList())
     }
 
@@ -244,13 +249,70 @@ object ChannelText {
         text = text.replace(leadingLive, "")
         feedCode.find(text)?.let { m -> feed = m.groupValues[1]; text = text.removeRange(m.range) }
         trailingFeed.find(text)?.let { m -> feed = m.groupValues[1].replace(Regex("""\s+"""), " "); text = text.removeRange(m.range) }
-        val parts = text.split('|').map { it.trim().trim('-', '–', '•', '●').trim() }
+        var parts = text.split('|').map { it.trim().trim('-', '–', '•', '●').trim() }
             .filter { it.isNotBlank() && !it.equals("all", true) && !Regex("""^[A-Z]+-[A-Z]{2}$""").matches(it) }
+        // "SERIE A ENILIVE - LECCE VS. BOLOGNE": competition and match joined by a dash.
+        if (parts.size == 1) {
+            val pieces = parts[0].split(Regex("""\s+[-–]\s+"""))
+            val matchAt = pieces.indexOfFirst { versus.containsMatchIn(it) }
+            if (pieces.size > 1 && matchAt >= 0) {
+                parts = listOf(pieces[matchAt], pieces.filterIndexed { i, _ -> i != matchAt }.joinToString(" – "))
+            }
+        }
+        // The match is the part with two sides, wherever the provider puts it.
+        val matchIndex = parts.indexOfFirst { versus.containsMatchIn(it) || teamDash.containsMatchIn(it) }
+        if (matchIndex > 0) parts = listOf(parts[matchIndex]) + parts.filterIndexed { i, _ -> i != matchIndex }
         val idle = noEvent.containsMatchIn(raw)
-        val title = if (idle || start == null) fallbackTitle else parts.firstOrNull() ?: fallbackTitle
-        val competition = if (start != null) parts.getOrNull(1) else null
+        val title = if (idle || start == null) fallbackTitle
+        else parts.firstOrNull()?.let { tidyMatch(it) } ?: fallbackTitle
+        val competition = if (start != null) parts.getOrNull(1)?.let(::smartCase) else null
         return EventInfo(title, competition, feed, start, idle)
     }
+
+    private val versus = Regex("""(?i)\s(vs\.?|v\.?)\s""")
+    private val teamDash = Regex("""\p{L}{2,}\s+[-–]\s+\p{L}{2,}""")
+
+    /** "REAL BETIS SÉVILLE - CA OSASUNA" -> "Real Betis Séville vs. CA Osasuna". */
+    private fun tidyMatch(value: String): String {
+        // Case first, while the text is still all capitals, then the separator.
+        val cased = smartCase(value.replace(versus, " VS ").replace(spaces, " ").trim())
+        return if (versus.containsMatchIn(cased)) cased.replace(versus, " vs. ")
+        else cased.replaceFirst(Regex("""\s+[-–]\s+"""), " vs. ")
+    }
+
+    /** Title-cases names the provider wrote in capitals; short club tags (FC, CA, PSG) stay upper case. */
+    private fun smartCase(value: String): String {
+        val letters = value.filter(Char::isLetter)
+        if (letters.isEmpty() || letters.any(Char::isLowerCase)) return value
+        return value.split(' ').joinToString(" ") { word ->
+            when {
+                word.equals("VS.", true) || word.equals("VS", true) -> "vs."
+                word.length <= 3 && word.all { it.isLetter() } -> word
+                word.any { it == '.' || it.isDigit() } -> word // NHL.TV, F1, 4K
+                else -> word.lowercase(java.util.Locale.FRENCH).replaceFirstChar { it.titlecase(java.util.Locale.FRENCH) }
+            }
+        }
+    }
+
+    /** Same match from two naming styles: "Atalanta vs. Venise" and "ATALANTA VS. VENISE". */
+    fun eventKey(info: EventInfo): String? = info.start?.let { start ->
+        normalize(info.title).replace(Regex("""\bvs\b|[^\p{L}\p{N}]+"""), " ").replace(spaces, " ").trim() + "@" + start
+    }
+
+    /** "Commence aujourd’hui à 18:30" / "Commence mercredi 14 octobre à 00:30". */
+    fun eventStartSentence(info: EventInfo, now: Long = System.currentTimeMillis()): String {
+        val start = info.start ?: return ""
+        val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE).format(java.util.Date(start))
+        return when (dayIndex(start) - dayIndex(now)) {
+            0L -> "Commence aujourd’hui à $time"
+            1L -> "Commence demain à $time"
+            else -> "Commence " + java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.FRANCE).format(java.util.Date(start)) + " à $time"
+        }
+    }
+
+    /** Before kickoff an event feed shows nothing; streams are only opened from 15 minutes before. */
+    fun notStartedYet(info: EventInfo?, now: Long = System.currentTimeMillis()): Boolean =
+        info?.start != null && !info.idle && now < info.start - 15 * 60_000L
 
     private fun timestamp(year: Int, month: Int, day: Int, hour: Int, minute: Int): Long =
         java.util.Calendar.getInstance().apply {

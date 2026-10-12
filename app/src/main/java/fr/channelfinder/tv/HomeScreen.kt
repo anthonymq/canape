@@ -53,7 +53,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Calendar
@@ -98,7 +101,7 @@ fun HomeScreen(state: AppState) {
         }
     }
 
-    val recentChannels = state.recent.mapNotNull(state.channelsById::get)
+    val recentChannels = state.recent.mapNotNull(state.channelsById::get).filter { it.lane != BrowseLane.EVENTS.label }
     val favoriteChannels = state.favorites.mapNotNull(state.channelsById::get)
     val pinned = state.pinnedCategories.mapNotNull(state.categoriesById::get)
 
@@ -133,12 +136,15 @@ fun HomeScreen(state: AppState) {
 
         item(key = "lanes") {
             HomeRow(title = null) {
-                val (liveEvents, soonEvents) = remember(state.channels) { state.upcomingEventCount() }
+                // Counted off the main thread: scanning 24k channels here froze Home after launch.
+                val eventCounts by produceState(0 to 0, state.channels) {
+                    value = withContext(Dispatchers.Default) { state.upcomingEventCount() }
+                }
+                val (liveEvents, soonEvents) = eventCounts
                 // Counts match what the lane shows once opened, including the saved quality filter.
                 val quality = state.qualityFilter
-                val qualityCounts = remember(state.channels, quality) {
-                    if (quality == null) null else state.channels.filter { it.quality == quality }.groupingBy { it.lane }.eachCount()
-                }
+                // Null until the background pass has counted; the cards show plain totals meanwhile.
+                val qualityCounts = quality?.let { state.qualityLaneCounts[it] }
                 laneStyles.forEach { style ->
                     LaneCard(
                         style = style,

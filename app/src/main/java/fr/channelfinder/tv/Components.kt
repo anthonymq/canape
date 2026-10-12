@@ -21,6 +21,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -590,7 +591,11 @@ fun EventTag(channel: Channel, modifier: Modifier = Modifier) {
             Box(Modifier.size(6.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))
             Text(label, style = Type.Badge, color = androidx.compose.ui.graphics.Color.White)
         }
-        ChannelText.EventStatus.UPCOMING -> Badge(label, modifier, tone = Palette.Accent)
+        // On a focused (light) row the light accent is unreadable; use the dark variant there.
+        ChannelText.EventStatus.UPCOMING -> Badge(
+            label, modifier,
+            tone = if (LocalContentColor.current.luminance() < 0.5f) Palette.AccentOnLight else Palette.Accent
+        )
         else -> Badge(label, modifier, tone = secondaryColor())
     }
 }

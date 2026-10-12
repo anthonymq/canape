@@ -3,6 +3,7 @@ package fr.channelfinder.tv
 import android.content.Context
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Star
@@ -19,6 +20,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val UNAVAILABLE_FOR_MS = 12 * 60 * 60 * 1000L
+
+/** Viewer's own countries first in each lane (ISO codes). */
+private val preferredCountries = mapOf(
+    BrowseLane.FRANCE to listOf("FR"),
+    BrowseLane.PORTUGUESE to listOf("PT", "BR"),
+    BrowseLane.SPORTS to listOf("FR", "PT", "BR")
+)
 
 /** App-wide state: catalog, back stack, favorites, recents and per-screen positions. */
 class AppState(context: Context, private val scope: CoroutineScope) {
@@ -44,6 +52,8 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     var categoryCounts by mutableStateOf(emptyMap<String, Int>())
         private set
     var laneCounts by mutableStateOf(emptyMap<String, Int>())
+        private set
+    var qualityLaneCounts by mutableStateOf(emptyMap<ChannelText.VideoQuality, Map<String, Int>>())
         private set
     var lastUpdated by mutableStateOf(0L)
         private set
@@ -247,16 +257,27 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         val categoryMap = withContext(Dispatchers.Default) { catalog.categories.associateBy { it.id } }
         val perCategory = withContext(Dispatchers.Default) { catalog.channels.groupingBy { it.categoryId }.eachCount() }
         val perLane = withContext(Dispatchers.Default) { catalog.channels.groupingBy { it.lane }.eachCount() }
+
         channels = catalog.channels
         categories = catalog.categories
         channelsById = byId
         categoriesById = categoryMap
         categoryCounts = perCategory
         laneCounts = perLane
+        val eventIds = catalog.channels.asSequence().filter { it.lane == BrowseLane.EVENTS.label }.map { it.id }.toHashSet()
+        if (recent.removeAll { it in eventIds }) persistUsage()
         lastUpdated = savedAt
         android.util.Log.i("AppState", "Catalog applied in ${android.os.SystemClock.elapsedRealtime() - started} ms")
-        // Warm search keys off the main thread so the first keystroke is instant.
-        scope.launch(Dispatchers.Default) { catalog.channels.forEach { it.searchKey; it.nameKey } }
+        // Derived fields are lazy. Resolve them in the background right after Home shows, so neither Home
+        // nor the lists parse 24k names while drawing (a ~4 s freeze), and Home does not wait for them either.
+        scope.launch {
+            val perQuality = withContext(Dispatchers.Default) {
+                catalog.channels.forEach { it.country; it.event; it.searchKey; it.nameKey }
+                catalog.channels.filter { it.quality != null }.groupBy { it.quality!! }
+                    .mapValues { (_, list) -> list.groupingBy { it.lane }.eachCount() }
+            }
+            if (channels === catalog.channels) qualityLaneCounts = perQuality
+        }
     }
     // endregion
 
@@ -265,16 +286,24 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         val list = when {
             categoryId != null -> channels.filter { it.categoryId == categoryId }
             lane == BrowseLane.FAVORITES -> return favorites.mapNotNull(channelsById::get)
-            lane == BrowseLane.RECENT -> return recent.mapNotNull(channelsById::get)
+            lane == BrowseLane.RECENT -> return recent.mapNotNull(channelsById::get).filter { it.lane != BrowseLane.EVENTS.label }
             lane == BrowseLane.ALL -> channels
             lane == BrowseLane.EVENTS -> return eventsInOrder(channels.filter { it.lane == lane.label })
-                // Providers publish most matches twice (main and backup group): list each match once,
-                // keeping a copy that has not failed. Both stay reachable from their category.
-                .distinctBy { channel -> channel.event?.takeIf { it.start != null }?.let { "${it.title}|${it.start}" } ?: channel.id }
-            else -> channels.filter { it.lane == lane.label }.sortedBy { ChannelText.categoryRank(it.category) }
+                // Providers publish most matches several times (main/backup groups, two naming styles):
+                // list each match once, keeping a copy that has not failed. All stay reachable from their category.
+                .distinctBy { channel -> channel.event?.let(ChannelText::eventKey) ?: channel.id }
+            else -> channels.filter { it.lane == lane.label }
         }
-        // Channels that just failed go last; the provider order is kept otherwise (sort is stable).
-        return list.sortedBy { if (isUnavailable(it.id)) 1 else 0 }
+        // Working channels first, then the viewer's own countries, then general-interest groups.
+        // The provider order is kept otherwise (sort is stable).
+        val countries = preferredCountries[lane].orEmpty()
+        return list.sortedWith(
+            compareBy<Channel>(
+                { if (isUnavailable(it.id)) 1 else 0 },
+                { if (categoryId != null) 0 else countries.indexOf(it.country).let { i -> if (i < 0) countries.size else i } },
+                { ChannelText.categoryRank(it.category) }
+            )
+        )
     }
 
     /** Live now, then upcoming by start time, then generic match feeds, then finished or idle feeds. */
@@ -298,18 +327,20 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     /** Events on now or later today/tomorrow, for the Home card. */
     fun upcomingEventCount(): Pair<Int, Int> {
         val now = System.currentTimeMillis()
-        var live = 0
-        var soon = 0
+        // Each match once, as in the Événements list.
+        val live = HashSet<String>()
+        val soon = HashSet<String>()
         channels.forEach { channel ->
             if (channel.lane != BrowseLane.EVENTS.label) return@forEach
             val info = channel.event ?: return@forEach
+            val key = ChannelText.eventKey(info) ?: channel.id
             when (info.status(now)) {
-                ChannelText.EventStatus.LIVE -> live++
-                ChannelText.EventStatus.UPCOMING -> if ((info.start ?: 0) - now < 36 * 3_600_000L) soon++
+                ChannelText.EventStatus.LIVE -> live += key
+                ChannelText.EventStatus.UPCOMING -> if ((info.start ?: 0) - now < 36 * 3_600_000L) soon += key
                 else -> Unit
             }
         }
-        return live to soon
+        return live.size to soon.size
     }
 
     fun search(all: List<Channel>, query: String, quality: ChannelText.VideoQuality? = null): List<Channel> {
@@ -334,10 +365,19 @@ class AppState(context: Context, private val scope: CoroutineScope) {
 
     private fun rememberWatched(channelId: String) {
         selectedChannelId = channelId
+        // An event feed carries a different programme after the match, so it never goes to "Reprendre".
+        if (channelsById[channelId]?.lane == BrowseLane.EVENTS.label) return
         recent.remove(channelId)
         recent.add(0, channelId)
         while (recent.size > 20) recent.removeAt(recent.lastIndex)
         persistUsage()
+    }
+
+    fun removeRecent(channel: Channel) {
+        if (recent.remove(channel.id)) {
+            persistUsage()
+            notice = Notice("${channel.displayName} retirée des récents", Icons.Rounded.History)
+        }
     }
 
     fun clearRecent() {

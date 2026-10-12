@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -316,11 +317,25 @@ fun SettingsScreen(state: AppState) {
                 // The Xtream username is half of the credentials: never show it on a shared screen.
                 subtitle = if (host.isBlank()) "Serveur, utilisateur et mot de passe" else "Serveur : $host"
             ) { state.editAccount() }
+            // Erasing the whole history takes a second press; the row says so, and resets after a few seconds.
+            var confirmClear by remember { mutableStateOf(false) }
+            LaunchedEffect(confirmClear) { if (confirmClear) { delay(5_000); confirmClear = false } }
             SettingsRow(
                 icon = Icons.Rounded.History,
-                title = "Effacer les chaînes récentes",
-                subtitle = if (state.recent.isEmpty()) "L’historique est vide" else "${state.recent.size} chaînes dans l’historique"
-            ) { state.clearRecent() }
+                title = if (confirmClear) "Appuyez encore pour tout effacer" else "Effacer les chaînes récentes",
+                subtitle = when {
+                    state.recent.isEmpty() -> "L’historique est vide"
+                    confirmClear -> "${state.recent.size} chaînes seront retirées de l’historique"
+                    else -> "${state.recent.size} chaînes dans l’historique"
+                },
+                modifier = Modifier.onFocusChanged { if (!it.isFocused) confirmClear = false }
+            ) {
+                when {
+                    state.recent.isEmpty() -> Unit
+                    confirmClear -> { state.clearRecent(); confirmClear = false }
+                    else -> confirmClear = true
+                }
+            }
         }
         Spacer(Modifier.weight(1f))
         Text(

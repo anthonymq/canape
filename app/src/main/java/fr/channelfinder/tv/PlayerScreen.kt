@@ -23,7 +23,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.runtime.Composable
@@ -62,7 +64,7 @@ import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
 
-private enum class PlayStatus { LOADING, PLAYING, ERROR }
+private enum class PlayStatus { LOADING, PLAYING, ERROR, NOT_STARTED }
 
 @Composable
 fun PlayerScreen(state: AppState, page: Page.Player) {
@@ -80,6 +82,8 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     val scope = rememberCoroutineScope()
     val currentId by rememberUpdatedState(page.channelId)
     var attempt by remember { mutableIntStateOf(0) }
+    // "Essayer quand même" on an event that has not started (kickoff times can be in another time zone).
+    var forceStart by remember(page.channelId) { mutableStateOf(false) }
     var bannerVisible by remember { mutableStateOf(true) }
     var bannerTick by remember { mutableIntStateOf(0) }
     // While zapping, the banner follows the D-pad immediately; the stream switches once the viewer pauses.
@@ -148,6 +152,12 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
         firstFrame = false
         autoRetries = 0
         val channel = state.channelsById[page.channelId] ?: return@LaunchedEffect
+        if (!forceStart && ChannelText.notStartedYet(channel.event)) {
+            player.stop()
+            player.clearMediaItems()
+            status = PlayStatus.NOT_STARTED
+            return@LaunchedEffect
+        }
         player.setMediaItem(MediaItem.fromUri(state.repository.streamUrl(account, channel)))
         player.volume = 1f
         player.playWhenReady = true
@@ -169,7 +179,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     }
     LaunchedEffect(status) {
         delay(50)
-        runCatching { if (status == PlayStatus.ERROR) retryFocus.requestFocus() else rootFocus.requestFocus() }
+        runCatching { if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) retryFocus.requestFocus() else rootFocus.requestFocus() }
     }
 
     Box(
@@ -181,11 +191,11 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
                     Key.DirectionUp, Key.ChannelDown -> { zap(-1); true }
                     Key.DirectionDown, Key.ChannelUp -> { zap(1); true }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                        if (status == PlayStatus.ERROR) false
+                        if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) false
                         else { if (bannerVisible) bannerVisible = false else showBanner(); true }
                     }
                     Key.DirectionLeft, Key.DirectionRight, Key.Info, Key.Guide -> {
-                        if (status == PlayStatus.ERROR) false else { showBanner(); true }
+                        if (status == PlayStatus.ERROR || status == PlayStatus.NOT_STARTED) false else { showBanner(); true }
                     }
                     else -> false
                 }
@@ -198,7 +208,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             modifier = Modifier.fillMaxSize()
         )
 
-        if (status != PlayStatus.ERROR && (!firstFrame || pendingIndex != playlist.indexOf(page.channelId))) {
+        if (status != PlayStatus.ERROR && status != PlayStatus.NOT_STARTED && (!firstFrame || pendingIndex != playlist.indexOf(page.channelId))) {
             // Dim the previous picture while the next channel loads so the loading message stays readable.
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (firstFrame) 0.7f else 0f)))
             Column(Modifier.align(Alignment.Center).padding(bottom = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -210,6 +220,31 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             }
         } else if (status == PlayStatus.PLAYING && buffering) {
             Spinner(Modifier.align(Alignment.Center).size(44.dp))
+        }
+
+        if (status == PlayStatus.NOT_STARTED) {
+            Column(
+                Modifier.align(Alignment.Center).widthIn(max = 620.dp)
+                    .background(Palette.Surface1.copy(alpha = 0.96f), RoundedCornerShape(24.dp))
+                    .padding(36.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(Icons.Rounded.Schedule, contentDescription = null, tint = Palette.Accent, modifier = Modifier.size(44.dp))
+                Spacer(Modifier.height(14.dp))
+                Text(shownChannel.displayName, style = Type.Headline, color = Palette.OnSurface, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "${shownChannel.event?.let(ChannelText::eventStartSentence).orEmpty()}. Le direct n’a pas encore commencé.",
+                    style = Type.Body, color = Palette.Muted, textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(24.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    TvButton("Essayer quand même", { forceStart = true; attempt++ }, Modifier.focusRequester(retryFocus), icon = Icons.Rounded.PlayArrow, primary = true)
+                    if (playlist.size > 1) TvButton("Chaîne suivante", { zap(1) }, icon = Icons.Rounded.SkipNext)
+                }
+                Spacer(Modifier.height(18.dp))
+                HintBar("▲▼" to "Changer de chaîne", "RETOUR" to "Revenir à la liste")
+            }
         }
 
         if (status == PlayStatus.ERROR) {
@@ -235,7 +270,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
         }
 
         AnimatedVisibility(
-            visible = bannerVisible && status != PlayStatus.ERROR,
+            visible = bannerVisible && status != PlayStatus.ERROR && status != PlayStatus.NOT_STARTED,
             enter = fadeIn(tween(180)) + slideInVertically(tween(220)) { it / 3 },
             exit = fadeOut(tween(300)) + slideOutVertically(tween(300)) { it / 3 },
             modifier = Modifier.align(Alignment.BottomCenter)

@@ -21,6 +21,7 @@ object Palette {
     val Faint = Color(0xFF94A2B6)   // ~7:1 on Ink
     val Accent = Color(0xFF8AB8FF)
     val AccentDeep = Color(0xFF22395C)
+    val AccentOnLight = Color(0xFF1C4F9C) // accent text on the light focused surface (~7:1)
     val FocusFill = Color(0xFFF2F5FA)
     val OnFocus = Color(0xFF0A0F18)
     val Gold = Color(0xFFFFCB57)
@@ -68,7 +69,12 @@ fun ChannelFinderTheme(content: @Composable () -> Unit) {
             inverseOnSurface = Palette.OnFocus,
             border = Palette.Outline,
             error = Palette.Error
-        ),
-        content = content
-    )
+        )
+    ) {
+        // Light content by default on the dark background; focused surfaces override it with dark content.
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.tv.material3.LocalContentColor provides Palette.OnSurface,
+            content = content
+        )
+    }
 }
