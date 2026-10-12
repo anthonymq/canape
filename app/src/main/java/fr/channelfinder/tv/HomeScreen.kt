@@ -37,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -61,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Locale
@@ -84,6 +86,13 @@ private val laneStyles = listOf(
 
 @Composable
 fun HomeScreen(state: AppState) {
+    val summaryRequests = remember { Semaphore(2) }
+    var programmeNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); programmeNow = System.currentTimeMillis() } }
+    @Composable
+    fun programmeTitle(channel: Channel): String = state.account?.let { account ->
+        currentProgrammeSummary(account, channel.id, state.guideRepository, summaryRequests, programmeNow, showStatus = false)
+    }.orEmpty()
     val requesters = remember { mutableMapOf<String, FocusRequester>() }
     fun requester(key: String) = requesters.getOrPut(key) { FocusRequester() }
     var homeHasFocus by remember { mutableStateOf(false) }
@@ -167,7 +176,7 @@ fun HomeScreen(state: AppState) {
                 item(key = "recent") {
                     HomeRow(title = "Reprendre", subtitle = "Vos dernières chaînes") {
                         recentChannels.take(ROW_LIMIT).forEach { channel ->
-                            ChannelCard(channel, isFavorite = channel.id in state.favorites, width = cardWidth, modifier = Modifier.homeFocus("recent:${channel.id}"),
+                            ChannelCard(channel, isFavorite = channel.id in state.favorites, width = cardWidth, modifier = Modifier.homeFocus("recent:${channel.id}"), programmeSummary = programmeTitle(channel),
                                 onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, recentChannels) }
                         }
                         // Récents has no drawer item: its full list (with "Retirer") opens from here.
@@ -182,7 +191,7 @@ fun HomeScreen(state: AppState) {
                         HintCard(Icons.Rounded.StarOutline, "Aucun favori pour l’instant", "Sur une chaîne, faites un appui long sur OK pour l’ajouter ici.")
                     } else {
                         favoriteChannels.take(ROW_LIMIT).forEach { channel ->
-                            ChannelCard(channel, isFavorite = true, width = cardWidth, modifier = Modifier.homeFocus("fav:${channel.id}"),
+                            ChannelCard(channel, isFavorite = true, width = cardWidth, modifier = Modifier.homeFocus("fav:${channel.id}"), programmeSummary = programmeTitle(channel),
                                 onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, favoriteChannels) }
                         }
                         if (favoriteChannels.size > ROW_LIMIT) SeeAllCard(Modifier.homeFocus("fav:all")) { state.openDestination(NavDest.FAVORITES) }
@@ -281,7 +290,7 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
 
 
 @Composable
-fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, width: Dp, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
+fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, width: Dp, programmeSummary: String = "", onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     // Five columns share the width remaining after the drawer and safe margins.
     // Height follows the text, so nothing is cut off with a larger system text size.
     CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.width(width).heightIn(min = 108.dp)) {
@@ -301,6 +310,8 @@ fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, width
                     channel.badges.firstOrNull()?.let { Badge(it, tone = Palette.Muted) }
                     Text(channel.categoryDisplay, style = Type.Caption, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
+                if (programmeSummary.isNotBlank()) Text(programmeSummary, style = Type.Caption, color = Palette.Muted,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

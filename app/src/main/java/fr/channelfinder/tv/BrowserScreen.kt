@@ -48,6 +48,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
@@ -78,6 +79,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -87,6 +89,14 @@ private val qualityExemptLanes = setOf(BrowseLane.EVENTS, BrowseLane.FAVORITES, 
 
 @Composable
 fun BrowserScreen(state: AppState, page: Page.Browse) {
+    val summaryRequests = remember { Semaphore(2) }
+    var programmeNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            programmeNow = System.currentTimeMillis()
+        }
+    }
     val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
     val category = page.categoryId?.let(state.categoriesById::get)
     // Favorites/recents are captured when the list opens so un-starring a row does not yank focus away.
@@ -287,6 +297,9 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                         }
                         ChannelRow(
                             channel = channel,
+                            programmeSummary = if (channel.event == null) state.account?.let { account ->
+                                currentProgrammeSummary(account, channel.id, state.guideRepository, summaryRequests, programmeNow, showStatus = false)
+                            } else null,
                             timeOnly = sectioned,
                             // The group name only where it changes; the preview always shows it.
                             showCategory = page.categoryId == null &&
@@ -395,6 +408,7 @@ private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: Channe
 @Composable
 private fun ChannelRow(
     channel: Channel,
+    programmeSummary: String?,
     timeOnly: Boolean,
     showCategory: Boolean,
     isFavorite: Boolean,
@@ -433,6 +447,8 @@ private fun ChannelRow(
                         Text(channel.categoryDisplay, style = Type.Caption, color = secondaryColor(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
+                if (!programmeSummary.isNullOrBlank()) Text(programmeSummary, style = Type.Caption, color = secondaryColor(),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (isFavorite) Icon(Icons.Rounded.Star, contentDescription = "Favori", tint = if (focused) Palette.GoldOnLight else Palette.Gold, modifier = Modifier.size(24.dp))
             // Lists guideline: an indicator, not only a background colour, marks the row shown in the preview.
@@ -602,14 +618,14 @@ private fun PreviewPane(
             Text(channel.categoryDisplay, style = Type.Caption, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(16.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val afterWatch = guideFocus
-            TvButton("Regarder", onWatch, Modifier.focusRequester(watchFocus).returnToList(listFocus, afterWatch), icon = Icons.Rounded.PlayArrow, primary = true)
+            TvButton("Regarder", onWatch, Modifier.focusRequester(watchFocus).returnToList(listFocus, afterWatch), icon = Icons.Rounded.PlayArrow, primary = true, compact = true)
             TvButton("Guide TV", onGuide, Modifier.focusRequester(guideFocus).returnToList(listFocus,
-                if (channel.event == null) favoriteFocus else if (onRemoveRecent != null) removeFocus else listFocus), icon = Icons.Rounded.Schedule)
+                if (channel.event == null) favoriteFocus else if (onRemoveRecent != null) removeFocus else listFocus), icon = Icons.Rounded.Schedule, compact = true)
             if (channel.event == null) FavoriteButton(isFavorite, onToggleFavorite,
-                Modifier.focusRequester(favoriteFocus).returnToList(listFocus, if (onRemoveRecent != null) removeFocus else listFocus))
-            if (onRemoveRecent != null) TvButton("Retirer", onRemoveRecent, Modifier.focusRequester(removeFocus).returnToList(listFocus), icon = Icons.Rounded.Clear)
+                Modifier.focusRequester(favoriteFocus).returnToList(listFocus, if (onRemoveRecent != null) removeFocus else listFocus), compact = true)
+            if (onRemoveRecent != null) TvButton("Retirer", onRemoveRecent, Modifier.focusRequester(removeFocus).returnToList(listFocus), icon = Icons.Rounded.Clear, compact = true)
         }
 
     }

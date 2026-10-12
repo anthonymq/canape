@@ -22,44 +22,81 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Semaphore
 
 @Composable
 fun GuideScreen(state: AppState, page: Page.Guide) {
     val account = state.account ?: return
-    val channels = remember(page.playlist, state.channelsById) { page.playlist.mapNotNull(state.channelsById::get) }
-    val channel = state.channelsById[page.channelId] ?: return
+    val allChannels = remember(page.playlist, state.channelsById) { page.playlist.mapNotNull(state.channelsById::get) }
+    var onlyAvailable by remember { mutableStateOf(true) }
+    var summaryRevision by remember { mutableIntStateOf(0) }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val availability = remember(account, page.playlist, summaryRevision, now / (15 * 60_000L)) { mutableStateMapOf<String, Boolean>() }
+    val channels = allChannels.filter { !onlyAvailable || availability[it.id] != false }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
+    if (channels.isEmpty()) {
+        val showAllFocus = remember { FocusRequester() }
+        LaunchedEffect(Unit) { focusWhenReady(showAllFocus) }
+        Column(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
+            Text("Guide TV", style = Type.Display, color = Palette.OnSurface)
+            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Aucun programme en cours disponible", style = Type.Title, color = Palette.OnSurface)
+                Text("Les chaînes restent accessibles en direct.", style = Type.Caption, color = Palette.Muted)
+                Spacer(Modifier.height(Spacing.Gutter))
+                TvButton("Toutes les chaînes", { onlyAvailable = false }, Modifier.focusRequester(showAllFocus), primary = true)
+                Spacer(Modifier.height(10.dp))
+                TvButton("Réessayer", { summaryRevision++ })
+            }
+            HintBar("OK" to "Choisir", "RETOUR" to "Revenir")
+        }
+        return
+    }
+    val previousIndex = allChannels.indexOfFirst { it.id == page.channelId }
+    val channel = channels.firstOrNull { it.id == page.channelId }
+        ?: allChannels.drop(previousIndex.coerceAtLeast(0)).firstOrNull { it in channels }
+        ?: channels.last()
     val repository = state.guideRepository
+    val summaryRequests = remember(repository) { Semaphore(2) }
     var programmes by remember(channel.id) { mutableStateOf<List<TvProgramme>?>(null) }
     var error by remember(channel.id) { mutableStateOf<String?>(null) }
     var selected by remember(channel.id) { mutableStateOf<TvProgramme?>(null) }
     var retry by remember(channel.id) { mutableIntStateOf(0) }
-    val cancellation = remember(channel.id, retry) { CancellationSignal() }
+    val cancellation = remember(account, channel.id, retry, now / (15 * 60_000L)) { CancellationSignal() }
     DisposableEffect(cancellation) { onDispose { cancellation.cancel() } }
     var actionLabel by remember { mutableStateOf("Choisir") }
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var channelNavigation by remember { mutableStateOf(true) }
     val channelFocus = remember { FocusRequester() }
     val programmeFocus = remember { FocusRequester() }
     val watchFocus = remember { FocusRequester() }
     val refreshFocus = remember { FocusRequester() }
     val channelList = rememberLazyListState(channels.indexOf(channel).coerceAtLeast(0))
     val scheduleList = rememberLazyListState()
-    val requesters = remember(channels) { channels.associate { it.id to FocusRequester() } }
+    val requesters = remember(allChannels) { allChannels.associate { it.id to FocusRequester() } }
     val currentFocus = requesters[channel.id] ?: channelFocus
 
-    LaunchedEffect(Unit) { focusWhenReady(currentFocus); while (true) { delay(30_000); now = System.currentTimeMillis() } }
-    LaunchedEffect(channel.id, retry) {
+    LaunchedEffect(Unit) { focusWhenReady(currentFocus) }
+    LaunchedEffect(channel.id) {
+        if (channel.id != page.channelId) {
+            state.replaceTop(page.copy(channelId = channel.id))
+            if (channelNavigation) focusWhenReady(currentFocus)
+        }
+    }
+    LaunchedEffect(account, channel.id, retry, now / (15 * 60_000L)) {
         delay(if (retry == 0) 350 else 0)
         try {
             val rows = withContext(Dispatchers.IO) { repository.load(account, channel.id, cancellation, retry > 0) }
             programmes = rows
-            selected = rows.firstOrNull { it.end > System.currentTimeMillis() } ?: rows.lastOrNull()
-            scheduleList.scrollToItem(rows.indexOf(selected).coerceAtLeast(0))
+            error = null
+            val retained = rows.firstOrNull { it.key == selected?.key }
+            selected = retained ?: rows.firstOrNull { it.end > System.currentTimeMillis() } ?: rows.lastOrNull()
+            if (retained == null) scheduleList.scrollToItem(rows.indexOf(selected).coerceAtLeast(0))
         } catch (cancelled: CancellationException) { throw cancelled }
           catch (failure: CatalogException) { error = failure.message }
           catch (_: Exception) { error = "Impossible de charger le guide. Réessayez dans un instant." }
     }
-    fun watch() { state.watchFromGuide(channel, channels) }
-    fun refresh() { error = null; programmes = null; retry++ }
+    fun watch() { state.watchFromGuide(channel, allChannels) }
+    fun refresh() { error = null; programmes = null; retry++; summaryRevision++ }
 
     Column(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -68,15 +105,27 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                 Text("Programmes du fournisseur · horaires de la TV", style = Type.Caption, color = Palette.Muted)
             }
             TvButton("Actualiser", ::refresh, Modifier.focusRequester(refreshFocus)
-                .onFocusChanged { if (it.isFocused) actionLabel = "Actualiser" }
+                .onFocusChanged { if (it.isFocused) { actionLabel = "Actualiser"; channelNavigation = false } }
                 .focusProperties { down = currentFocus }, icon = Icons.Rounded.Refresh)
+        }
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("CHAÎNES", style = Type.Eyebrow, color = Palette.Faint)
+            TvChip("Avec programme", onlyAvailable, { onlyAvailable = true },
+                Modifier.focusProperties { down = currentFocus }
+                    .onFocusChanged { if (it.isFocused) { actionLabel = "Filtrer"; channelNavigation = false } }, compact = true)
+            TvChip("Toutes", !onlyAvailable, { onlyAvailable = false },
+                Modifier.focusProperties { down = currentFocus }
+                    .onFocusChanged { if (it.isFocused) { actionLabel = "Filtrer"; channelNavigation = false } }, compact = true)
         }
         Spacer(Modifier.height(Spacing.Gutter))
         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
-            LazyColumn(Modifier.width(200.dp).fillMaxHeight().onFocusChanged { if (it.hasFocus) actionLabel = "Choisir" }, state = channelList,
+            LazyColumn(Modifier.width(240.dp).fillMaxHeight().onFocusChanged { if (it.hasFocus) { actionLabel = "Choisir"; channelNavigation = true } }, state = channelList,
                 contentPadding = PaddingValues(horizontal = 6.dp, vertical = Spacing.ListPadding), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
                 items(channels, key = Channel::id) { item ->
                     val active = item.id == channel.id
+                    val summary = currentProgrammeSummary(account, item.id, repository, summaryRequests,
+                        now, summaryRevision, active, programmes, error) { availability[item.id] = it }
                     FocusSurface(onClick = { if (active) runCatching { if (programmes?.isNotEmpty() == true || error != null) programmeFocus.requestFocus() else watchFocus.requestFocus() }
                         else state.replaceTop(page.copy(channelId = item.id)) },
                         modifier = Modifier.fillMaxWidth().focusRequester(requesters.getValue(item.id))
@@ -90,6 +139,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                                 Text(item.displayName, style = Type.Label, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 Text((listOfNotNull(item.countryTag) + item.badges + item.categoryDisplay).joinToString(" · "),
                                     style = Type.Caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(summary, style = Type.Caption, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
                     }
@@ -119,7 +169,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                         }
                     }
                 } else {
-                    LazyColumn(Modifier.fillMaxWidth().weight(1f).onFocusChanged { if (it.hasFocus) actionLabel = "Direct" }, state = scheduleList,
+                    LazyColumn(Modifier.fillMaxWidth().weight(1f).onFocusChanged { if (it.hasFocus) { actionLabel = "Direct"; channelNavigation = false } }, state = scheduleList,
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = Spacing.ListPadding), verticalArrangement = Arrangement.spacedBy(Spacing.ListGap)) {
                         items(rows, key = TvProgramme::key) { programme ->
                             val active = selected?.key == programme.key
@@ -139,7 +189,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                 }
             }
             GuideDetails(channel, selected, now, ::watch, watchFocus, currentFocus, programmeFocus, refreshFocus,
-                programmes?.isNotEmpty() == true, onActionFocus = { actionLabel = it })
+                programmes?.isNotEmpty() == true, onActionFocus = { actionLabel = it; channelNavigation = false })
         }
         Spacer(Modifier.height(10.dp))
         HintBar((if (actionLabel == "Lire") "↑ ↓" else "OK") to actionLabel, "◀ ▶" to "Chaînes / programmes", "RETOUR" to "Revenir")

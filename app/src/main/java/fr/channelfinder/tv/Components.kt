@@ -279,7 +279,8 @@ fun TvButton(
     icon: ImageVector? = null,
     iconTint: Color? = null,
     primary: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    compact: Boolean = false
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -296,11 +297,11 @@ fun TvButton(
         enabled = enabled
     ) {
         Row(
-            Modifier.align(Alignment.Center).padding(horizontal = 20.dp, vertical = 9.dp),
+            Modifier.align(Alignment.Center).padding(horizontal = if (compact) 12.dp else 20.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp)
         ) {
-            if (icon != null) Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp), tint = if (focused || iconTint == null) LocalContentColor.current else iconTint)
+            if (icon != null) Icon(icon, contentDescription = null, modifier = Modifier.size(if (compact) 18.dp else 22.dp), tint = if (focused || iconTint == null) LocalContentColor.current else iconTint)
             Text(text, style = Type.Label, maxLines = 1)
         }
     }
@@ -631,10 +632,10 @@ fun UnavailableTag(modifier: Modifier = Modifier) {
 
 /**
  * Favourite toggle as an outlined icon button (TV buttons guideline: icon buttons for on/off actions such as
- * favourites). Focused, it spells out the action, so the star is never ambiguous.
+ * favourites). Focused, it spells out the action unless compact; semantics always name it.
  */
 @Composable
-fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     val action = if (isFavorite) "Retirer des favoris" else "Ajouter aux favoris"
@@ -649,7 +650,7 @@ fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: Modifier 
         focusedScale = 1.1f
     ) {
         Row(
-            Modifier.align(Alignment.Center).padding(horizontal = if (focused) 18.dp else 10.dp, vertical = 9.dp),
+            Modifier.align(Alignment.Center).padding(horizontal = if (focused && !compact) 18.dp else 10.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -663,7 +664,7 @@ fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: Modifier 
                     else -> LocalContentColor.current
                 }
             )
-            if (focused) Text(action, style = Type.Label, maxLines = 1)
+            if (focused && !compact) Text(action, style = Type.Label, maxLines = 1)
         }
     }
 }

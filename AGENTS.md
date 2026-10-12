@@ -36,14 +36,37 @@ The APK lands in `app/build/outputs/apk/debug/app-debug.apk`. There is no `local
 
 ## Run on the emulator
 
-An Android TV image is required (`system-images;android-34;google-tv;arm64-v8a`); the AVD is `Google_TV_1080p_API_34`.
+An Android TV image is required (`system-images;android-34;google-tv;arm64-v8a`); the existing AVD is `Google_TV_1080p_API_34`. Run these commands from this repository directory. Set the SDK path even if you have not run the build commands in this terminal.
 
 ```bash
-$ANDROID_HOME/emulator/emulator -avd Google_TV_1080p_API_34 -no-snapshot-save &
-$ANDROID_HOME/platform-tools/adb wait-for-device
-$ANDROID_HOME/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk
-$ANDROID_HOME/platform-tools/adb shell monkey -p fr.channelfinder.tv -c android.intent.category.LEANBACK_LAUNCHER 1
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+"$ANDROID_HOME/emulator/emulator" -list-avds
+"$ANDROID_HOME/platform-tools/adb" devices
 ```
+
+Reuse a running TV emulator instead of starting a second copy. If none is running, start the AVD in the background; its startup log goes to the temporary directory:
+
+```bash
+nohup "$ANDROID_HOME/emulator/emulator" -avd Google_TV_1080p_API_34 -no-snapshot-save > "${TMPDIR:-/tmp}/easy-iptv-emulator.log" 2>&1 &
+```
+
+Wait for ADB, then for Android to finish booting (`wait-for-device` alone does not guarantee boot readiness). These commands select the emulator; if multiple emulators are running, replace `-e` with `-s` and the serial shown by `adb devices`.
+
+```bash
+"$ANDROID_HOME/platform-tools/adb" -e wait-for-device
+until [ "$("$ANDROID_HOME/platform-tools/adb" -e shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+  sleep 2
+done
+```
+
+Build the debug APK using the Build section above if needed, then install and open the app:
+
+```bash
+"$ANDROID_HOME/platform-tools/adb" -e install -r app/build/outputs/apk/debug/app-debug.apk
+"$ANDROID_HOME/platform-tools/adb" -e shell am start -n fr.channelfinder.tv/.MainActivity
+```
+
+In a restricted Codex sandbox, ADB may fail with `could not install *smartsocket* listener: Operation not permitted`, and the emulator may report a Crashpad permission error. Retry emulator/ADB commands with the tool's elevated execution permission rather than changing the AVD or reinstalling the SDK. Wait for approval before retrying if the tool requires it.
 
 Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LEFT|DPAD_RIGHT|DPAD_CENTER|BACK`) and capture with `adb exec-out screencap -p > shot.png`. Test with the remote only: anything that needs a tap is a bug. `adb install -r` keeps the saved account, so re-entering credentials is not needed between builds.
 
@@ -65,6 +88,7 @@ Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LE
 
 ## Working conventions
 
+- Stop when the requested task is complete and its relevant checks have passed or any verification limits have been reported. Deliver a concise final response, then stop; do not continue with extra checks, cleanup, refactors, or unrelated improvements. Documentation-only tasks require documentation checks, not an app rebuild or emulator run.
 - UI text is French; keep new strings in French and consistent with existing wording.
 - Design for a TV at sofa distance and follow the Android TV design guidelines: D-pad focus must always be visible, reachable, and predictable; text must be high-contrast, at least 14 sp for running text and 12 sp for badges/eyebrows (the user asked for a denser UI on 2026-10-11, so keep rows around 56 dp rather than growing them back); keep the 58 dp side / 28 dp top-bottom margins; no on-screen back buttons; secondary actions use a long press on OK.
 - `FocusSurface`/`CardSurface` fall back to a foundation-`clickable` surface when there is no long press, because TV Material's `Surface` always reports a long-press action to accessibility services. Only pass `onLongClick` when the element really has one.
