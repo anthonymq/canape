@@ -54,6 +54,13 @@ private fun ChannelFinderApp(probe: String? = null) {
             }
         }
     }
+    // Live/upcoming match counts change with the clock as well as the catalog.
+    LaunchedEffect(state.channels) {
+        while (state.channels.isNotEmpty()) {
+            state.refreshEventCounts()
+            delay(5 * 60_000L)
+        }
+    }
     LaunchedEffect(state.notice?.id) {
         if (state.notice != null) {
             delay(2600)
@@ -68,23 +75,31 @@ private fun ChannelFinderApp(probe: String? = null) {
             .background(Palette.Ink)
             .background(Brush.verticalGradient(0f to Palette.InkTop, 0.55f to Palette.Ink))
     ) {
-        AnimatedContent(
-            targetState = state.page,
-            contentKey = { it::class },
-            transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(120)) },
-            label = "page"
-        ) { page ->
-            when (page) {
-                Page.Loading -> LoadingScreen(state.loadStep)
-                is Page.LoadError -> LoadErrorScreen(page.message, onRetry = state::retry, onEditAccount = state::editAccount)
-                is Page.Setup -> SetupScreen(state, page)
-                Page.Home -> HomeScreen(state)
-                Page.Settings -> SettingsScreen(state)
-                is Page.CategoryPicker -> CategoryPickerScreen(state, page)
-                is Page.Browse -> BrowserScreen(state, page)
-                is Page.Player -> PlayerScreen(state, page)
+        val pages: @Composable () -> Unit = {
+            AnimatedContent(
+                targetState = state.page,
+                contentKey = { it::class },
+                transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(120)) },
+                label = "page"
+            ) { page ->
+                when (page) {
+                    Page.Loading -> LoadingScreen(state.loadStep)
+                    is Page.LoadError -> LoadErrorScreen(page.message, onRetry = state::retry, onEditAccount = state::editAccount)
+                    is Page.Setup -> SetupScreen(state, page)
+                    Page.Home -> HomeScreen(state)
+                    Page.Settings -> SettingsScreen(state)
+                    is Page.CategoryPicker -> CategoryPickerScreen(state, page)
+                    is Page.Browse -> BrowserScreen(state, page)
+                    is Page.Player -> PlayerScreen(state, page)
+                }
             }
         }
+        // The navigation drawer frames the browsing screens; playback, setup and loading stay full screen.
+        val withDrawer = when (state.page) {
+            Page.Home, Page.Settings, is Page.CategoryPicker, is Page.Browse -> true
+            else -> false
+        }
+        if (withDrawer) AppDrawer(state) { pages() } else pages()
         NoticeHost(state.notice, atBottom = state.page == Page.Home)
     }
 }

@@ -42,9 +42,15 @@ The interface must work with D-pad focus and OK/Back actions. It should make the
 
 Many Xtream providers only offer HTTP and redirect stream requests to other servers (often bare IP addresses), so the app permits cleartext traffic to any host. The setup screen warns that HTTP does not protect account details or streams in transit. Keep this warning visible; encrypted local storage does not encrypt network traffic.
 
+### Navigation drawer
+
+Browsing screens (Accueil, lanes, search, Catégories, Réglages) sit in a modal navigation drawer, per the Android TV navigation drawer guideline. Collapsed, it is an 80 dp icon rail; focusing it (Left from the leftmost element) expands it over the content with a scrim, on the current destination's item. Items: **Rechercher** at the top (searches every channel); **Accueil, France, Português, Sports, Événements, Favoris** as the six main destinations; **Catégories** and **Réglages** at the bottom. Récents has no item; its full list opens from the "Tout voir" card at the end of Reprendre. The active destination has a highlighted background. Événements shows a red dot (count when expanded) while matches are live. Playback, setup and loading screens have no drawer.
+
+Back follows the guideline for side navigation: on a screen opened from the drawer, Back (after returning a scrolled list to the top) opens the drawer on that screen's item; Back in the drawer goes to Accueil; on Accueil, Back opens the drawer and a further Back leaves the app. Sub-pages (a category opened from the picker, Récents) return to the screen they came from. Each list's own search field searches only that list ("Rechercher dans France").
+
 ### Home
 
-Home should answer “what can I watch quickly?” It is a vertical stack of rows: three large lane cards (France, Português, Sports, 268 dp), four shortcuts (Rechercher, Favoris, Récents, Catégories, 196 dp), **Reprendre** (recent channels with logos, OK plays directly), **Mes favoris**, and **Catégories épinglées**. The France card has focus when Home opens; returning to Home restores the last focused card. Back from anywhere below the first card scrolls to the top and focuses France; Back from France leaves the app (no confirmation).
+Home should answer “what can I watch quickly?” It is a vertical stack of rows: four lane cards (France, Português, Sports, Événements), **Reprendre** (recent channels with logos, OK plays directly, ending with "Tout voir"), **Mes favoris**, and **Catégories épinglées**. Search, Favoris, Catégories and Réglages are in the drawer. The France card has focus when Home opens; returning to Home restores the last focused card. Back from anywhere below the first card scrolls to the top and focuses France; Back from France leaves the app (no confirmation).
 
 Pinned category shortcuts show their category label and channel count. Selecting a shortcut opens the category's channel list directly. Category favorites are stored locally by Xtream category ID, not by parsing the category label.
 
@@ -146,6 +152,7 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 - **Lane classification:** the category's country code now decides the lane when present; name keywords are only used for untagged categories. Sports keeps only FR/PT/BR-tagged groups (391 channels); other countries' sports (including `BE ‖ BELGIQUE • SPORTS`) stay reachable from their category and search.
 - **Provider-side dead channels:** many France/Português channels answer HTTP 407 (see [Unavailable channels](#unavailable-channels)). The app learns them as the viewer meets them; there is no background scan, to avoid extra provider connections on a one-connection account.
 - **Event times:** kickoff times in feed names are read in the TV's time zone; the provider's zone is not documented. Events are considered live for 3 hours after kickoff.
+- **Partial catalogs from the provider:** on 2026-10-12 a background refresh received 70 channels instead of ~24,000 and replaced the saved catalog. A refresh that returns less than half of a catalog of 1,000+ channels is now ignored (logged as `Ignoring partial catalog`).
 - **Catalog cache read time:** reading ~24k channels from the binary cache takes about 3 s on the emulator with a debug build. Measure on the target TV with a release build before optimizing further.
 - **Logos depend on the provider:** many `stream_icon` URLs are empty or fail; rows fall back to initials.
 - **Display-name cleanup is heuristic:** only known country-code prefixes and quality tokens are stripped. Raw names are still searched.

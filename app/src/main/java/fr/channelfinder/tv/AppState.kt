@@ -152,6 +152,61 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         backStack.clear()
         backStack += target
     }
+
+    /** Drawer destinations are top level: the back stack becomes Home, then the destination. */
+    fun openDestination(dest: NavDest) {
+        val target = when (dest) {
+            NavDest.HOME -> null
+            NavDest.SEARCH -> Page.Browse(BrowseLane.ALL, startSearch = true)
+            NavDest.FRANCE -> Page.Browse(BrowseLane.FRANCE)
+            NavDest.PORTUGUESE -> Page.Browse(BrowseLane.PORTUGUESE)
+            NavDest.SPORTS -> Page.Browse(BrowseLane.SPORTS)
+            NavDest.EVENTS -> Page.Browse(BrowseLane.EVENTS)
+            NavDest.FAVORITES -> Page.Browse(BrowseLane.FAVORITES)
+            NavDest.CATEGORIES -> Page.CategoryPicker()
+            NavDest.SETTINGS -> Page.Settings
+        }
+        resetTo(Page.Home)
+        if (target != null) navigate(target)
+    }
+
+    /** The drawer item for the current screen: the destination the screen was reached from. */
+    val activeDest: NavDest
+        get() = when (val root = backStack.getOrNull(1)) {
+            null -> NavDest.HOME
+            Page.Settings -> NavDest.SETTINGS
+            is Page.CategoryPicker -> NavDest.CATEGORIES
+            is Page.Browse -> when {
+                root.categoryId != null -> NavDest.HOME // a pinned category opened from Home
+                root.lane == BrowseLane.FRANCE -> NavDest.FRANCE
+                root.lane == BrowseLane.PORTUGUESE -> NavDest.PORTUGUESE
+                root.lane == BrowseLane.SPORTS -> NavDest.SPORTS
+                root.lane == BrowseLane.EVENTS -> NavDest.EVENTS
+                root.lane == BrowseLane.FAVORITES -> NavDest.FAVORITES
+                root.lane == BrowseLane.ALL -> NavDest.SEARCH
+                else -> NavDest.HOME // Récents, opened from Home
+            }
+            else -> NavDest.HOME
+        }
+
+    /** A screen opened from the drawer (not a sub-page of it). Back there opens the drawer. */
+    val isDrawerRoot: Boolean get() = backStack.size == 2 && activeDest != NavDest.HOME
+
+    /** Incremented to move focus into the drawer, on the active item. */
+    var drawerFocusRequest by mutableStateOf(0)
+        private set
+
+    fun focusDrawer() {
+        drawerFocusRequest++
+    }
+
+    /** Live and upcoming matches (each counted once), for Home and the drawer badge. */
+    var eventCounts by mutableStateOf(0 to 0)
+        private set
+
+    suspend fun refreshEventCounts() {
+        eventCounts = withContext(Dispatchers.Default) { upcomingEventCount() }
+    }
     // endregion
 
     // region Catalog
@@ -227,6 +282,16 @@ class AppState(context: Context, private val scope: CoroutineScope) {
             refreshing = true
             try {
                 val catalog = withContext(Dispatchers.IO) { repository.loadCatalog(current) }
+                // Providers sometimes answer with a fraction of the list (seen: 70 channels instead of ~24,000).
+                // Never let such an answer replace a good catalog; keep the current one and its cache.
+                if (channels.size >= 1_000 && catalog.channels.size < channels.size / 2) {
+                    android.util.Log.w("AppState", "Ignoring partial catalog: ${catalog.channels.size} of ${channels.size} channels")
+                    if (!silent) notice = Notice(
+                        "Le fournisseur n’a renvoyé qu’une partie des chaînes. La liste actuelle est conservée.",
+                        Icons.Rounded.Refresh
+                    )
+                    return@launch
+                }
                 val previousChannels = channels
                 val previousCategories = categories
                 val changed = withContext(Dispatchers.Default) {

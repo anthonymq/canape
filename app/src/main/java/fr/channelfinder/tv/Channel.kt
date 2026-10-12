@@ -59,6 +59,9 @@ enum class BrowseLane(val label: String) {
     FAVORITES("Favoris"), RECENT("Récents"), ALL("Toutes")
 }
 
+/** Destinations of the navigation drawer, in drawer order. */
+enum class NavDest { SEARCH, HOME, FRANCE, PORTUGUESE, SPORTS, EVENTS, FAVORITES, CATEGORIES, SETTINGS }
+
 sealed interface Page {
     data object Loading : Page
     data class LoadError(val message: String) : Page

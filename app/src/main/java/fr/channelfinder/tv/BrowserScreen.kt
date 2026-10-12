@@ -79,10 +79,6 @@ private enum class PreviewState { WAITING, BUFFERING, READY, ERROR }
 
 private val qualityExemptLanes = setOf(BrowseLane.EVENTS, BrowseLane.FAVORITES, BrowseLane.RECENT)
 
-private val browseLanes = listOf(
-    BrowseLane.FRANCE, BrowseLane.PORTUGUESE, BrowseLane.SPORTS, BrowseLane.EVENTS, BrowseLane.FAVORITES, BrowseLane.RECENT, BrowseLane.ALL
-)
-
 @Composable
 fun BrowserScreen(state: AppState, page: Page.Browse) {
     val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
@@ -115,22 +111,23 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     val searchFocus = remember { FocusRequester() }
     val selectedRowFocus = remember { FocusRequester() }
     val watchFocus = remember { FocusRequester() }
-    val chipFocus = remember { browseLanes.associateWith { FocusRequester() } }
     val countryFocus = remember { mutableMapOf<String?, FocusRequester>() }
     val qualityFocus = remember { (listOf<ChannelText.VideoQuality?>(null) + ChannelText.VideoQuality.entries).associateWith { FocusRequester() } }
     var editing by remember { mutableStateOf(page.startSearch) }
     var listHasFocus by remember { mutableStateOf(false) }
 
-    // TV guideline: Back first returns to the top of a scrolled list, a second Back leaves.
+    // Back in a scrolled list returns to the top. On a screen opened from the drawer it also opens the
+    // drawer (left navigation guideline); in a sub-page (a category from the picker) the next Back leaves.
     // Registered before the search field's handler, so Back while typing still ends editing first.
     val scope = rememberCoroutineScope()
+    var screenHasFocus by remember { mutableStateOf(false) }
     val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
-    BackHandler(enabled = scrolled && results.isNotEmpty()) {
+    BackHandler(enabled = screenHasFocus && scrolled && results.isNotEmpty()) {
         scope.launch {
             state.selectedChannelId = results.first().id
             listState.scrollToItem(0)
             delay(32)
-            runCatching { selectedRowFocus.requestFocus() }
+            if (state.isDrawerRoot) state.focusDrawer() else runCatching { selectedRowFocus.requestFocus() }
         }
     }
 
@@ -179,12 +176,21 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
         else -> countLabel
     }
 
-    Column(Modifier.fillMaxSize().padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.Top, bottom = 20.dp)) {
+    Column(
+        Modifier.fillMaxSize()
+            .onFocusChanged { screenHasFocus = it.hasFocus }
+            .padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.Top, bottom = 20.dp)
+    ) {
         ScreenHeader(eyebrow, title) {
             TvTextField(
                 value = page.query,
                 onValueChange = { state.replaceTop(page.copy(query = it)) },
-                placeholder = "Rechercher une chaîne",
+                // The drawer's Rechercher covers every channel; this field searches the list on screen.
+                placeholder = when {
+                    category != null -> "Rechercher dans cette catégorie"
+                    page.lane == BrowseLane.ALL -> "Rechercher une chaîne"
+                    else -> "Rechercher dans ${page.lane.label}"
+                },
                 editing = editing,
                 onEditingChange = { editing = it },
                 icon = Icons.Rounded.Search,
@@ -193,24 +199,6 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                 outerFocusRequester = searchFocus,
                 modifier = Modifier.width(360.dp)
             )
-        }
-        if (page.categoryId == null) {
-            Row(
-                Modifier.padding(top = 10.dp)
-                    .focusProperties { onEnter = { runCatching { chipFocus.getValue(page.lane).requestFocus() } } }
-                    .focusGroup(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                browseLanes.forEach { lane ->
-                    TvChip(
-                        text = lane.label,
-                        selected = lane == page.lane,
-                        onClick = { if (lane != page.lane) state.replaceTop(page.copy(lane = lane, country = null)) },
-                        modifier = Modifier.focusRequester(chipFocus.getValue(lane))
-                            .then(if (filterRowShown) Modifier else Modifier.downToList(selectedRowFocus, results.isNotEmpty()))
-                    )
-                }
-            }
         }
         // Filters share one row (scrolls sideways if long) so the list keeps its height.
         if (filterRowShown) Row(

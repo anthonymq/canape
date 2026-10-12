@@ -343,7 +343,7 @@ fun SettingsScreen(state: AppState) {
             style = Type.Caption, color = Palette.Faint
         )
         Spacer(Modifier.height(12.dp))
-        HintBar("OK" to "Choisir", "RETOUR" to "Accueil")
+        HintBar("OK" to "Choisir", "RETOUR" to "Menu")
     }
 }
 

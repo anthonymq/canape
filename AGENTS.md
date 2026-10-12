@@ -52,6 +52,7 @@ Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LE
 - `MainActivity.kt`: activity, theme, root Back handling, screen routing.
 - `AppState.kt`: back stack (`Page`), catalog load/refresh, favorites, pins, recents, saved focus and scroll positions.
 - `Theme.kt`, `Components.kt`: design tokens and shared TV components. Use `FocusSurface` (light fill on focus) for rows/buttons/chips, `CardSurface` (white outline) for artwork cards, and `TvTextField` for any text input (it never opens the keyboard on focus).
+- `NavDrawer.kt`: modal navigation drawer around browsing screens (`AppDrawer`), drawer Back handling, `DrawerContentInset`. Destinations are `NavDest`; `AppState.openDestination` resets the stack to Home + destination, `activeDest`/`isDrawerRoot` decide the highlighted item and what Back does, `focusDrawer()` moves focus into it.
 - `HomeScreen.kt`, `BrowserScreen.kt`, `CategoryScreen.kt`, `PlayerScreen.kt`, `StartupScreens.kt` (setup, loading, error, settings).
 - `Playback.kt`: `buildStreamPlayer`, video surface, plain-language playback errors.
 - `ChannelText.kt`: display-name cleanup, badges, lane classification, event detection and parsing, lane ordering, ranked accent-insensitive search. `CatalogCache` stores lanes: bump its `VERSION` whenever lane rules change.
@@ -72,6 +73,7 @@ Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LE
 - The Google TV emulator sometimes shows a "Set up Google TV" prompt over the app; relaunch with `adb shell am start -n fr.channelfinder.tv/.MainActivity`.
 - Preview stays muted and starts only after focus settles (650 ms). Release players when leaving composition.
 - Many channels fail on the provider side with HTTP 407, some always and some intermittently (see PRD "Unavailable channels"). Verify playback with a known-good channel (search "TF1") or the stream probe before blaming the app.
+- With the drawer, Back on Accueil opens the drawer and the next Back leaves the app. The first D-pad key in the second after launch may only give focus to the first card.
 - When driving the emulator, never press Back on Home with France focused: it leaves the app, and the Google TV setup/sign-in screens take the next keystrokes. Check `dumpsys activity activities | grep topResumed` before typing.
 - After any change, build, reinstall on the emulator, and check the affected screen with screenshots before reporting it done.
 - Update the status tables and known issues in `PRD.md` when you verify or fix something.

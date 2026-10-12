@@ -149,7 +149,7 @@ fun CategoryPickerScreen(state: AppState, page: Page.CategoryPicker) {
                 }
             }
             Spacer(Modifier.height(10.dp))
-            HintBar("OK" to "Ouvrir", "▶ puis OK" to "Épingler sur l’accueil", "RETOUR" to "Accueil")
+            HintBar("OK" to "Ouvrir", "▶ puis OK" to "Épingler sur l’accueil", "RETOUR" to "Menu")
         }
     }
 }

@@ -53,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
-import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -66,6 +65,11 @@ private const val FIRST_TILE = "lane:FRANCE"
 private const val ROW_LIMIT = 12
 
 private data class LaneStyle(val lane: BrowseLane, val emoji: String, val subtitle: String, val colors: List<Color>)
+
+private val laneDest = mapOf(
+    BrowseLane.FRANCE to NavDest.FRANCE, BrowseLane.PORTUGUESE to NavDest.PORTUGUESE,
+    BrowseLane.SPORTS to NavDest.SPORTS, BrowseLane.EVENTS to NavDest.EVENTS
+)
 
 private val laneStyles = listOf(
     LaneStyle(BrowseLane.FRANCE, "🇫🇷", "Chaînes françaises", listOf(Color(0xFF27448F), Color(0xFF162550))),
@@ -93,11 +97,13 @@ fun HomeScreen(state: AppState) {
         if (!homeHasFocus) runCatching { requester(FIRST_TILE).requestFocus() }
     }
 
-    // TV convention: Back first returns to the top of Home, then leaves the app.
-    BackHandler(enabled = homeHasFocus && state.homeFocusKey != FIRST_TILE) {
+    // Left navigation guideline: Back opens the drawer on Accueil (Home scrolls back to the top behind it);
+    // a second Back, from the drawer, leaves the app.
+    BackHandler(enabled = homeHasFocus) {
         scope.launch {
+            state.homeFocusKey = FIRST_TILE
             state.homeListState.animateScrollToItem(0)
-            runCatching { requester(FIRST_TILE).requestFocus() }
+            state.focusDrawer()
         }
     }
 
@@ -121,26 +127,14 @@ fun HomeScreen(state: AppState) {
                     Spacer(Modifier.height(4.dp))
                     Text("Qu’est-ce qu’on regarde ?", style = Type.Display, color = Palette.OnSurface)
                 }
-                FocusSurface(
-                    onClick = { state.navigate(Page.Settings) },
-                    modifier = Modifier.size(48.dp).homeFocus("settings"),
-                    shape = CircleShape,
-                    container = Palette.Surface2,
-                    outline = Palette.Outline
-                ) {
-                    Icon(Icons.Rounded.Settings, contentDescription = "Réglages", modifier = Modifier.align(Alignment.Center).size(24.dp))
-                }
                 Clock(style = Type.Headline)
             }
         }
 
         item(key = "lanes") {
             HomeRow(title = null) {
-                // Counted off the main thread: scanning 24k channels here froze Home after launch.
-                val eventCounts by produceState(0 to 0, state.channels) {
-                    value = withContext(Dispatchers.Default) { state.upcomingEventCount() }
-                }
-                val (liveEvents, soonEvents) = eventCounts
+                // Counted in the background (scanning 24k channels here froze Home after launch).
+                val (liveEvents, soonEvents) = state.eventCounts
                 // Counts match what the lane shows once opened, including the saved quality filter.
                 val quality = state.qualityFilter
                 // Null until the background pass has counted; the cards show plain totals meanwhile.
@@ -158,27 +152,8 @@ fun HomeScreen(state: AppState) {
                             "${number.format(qualityCounts[style.lane.label] ?: 0)} en ${quality.label}"
                         } else "${number.format(state.laneCounts[style.lane.label] ?: 0)} chaînes",
                         modifier = Modifier.homeFocus("lane:${style.lane.name}")
-                    ) { state.navigate(Page.Browse(style.lane)) }
+                    ) { state.openDestination(laneDest.getValue(style.lane)) }
                 }
-            }
-        }
-
-        item(key = "shortcuts") {
-            HomeRow(title = null, topPadding = 0.dp) {
-                ShortcutCard(Icons.Rounded.Search, Palette.Accent, "Rechercher", "Par nom", Modifier.homeFocus("search")) {
-                    state.navigate(Page.Browse(BrowseLane.ALL, startSearch = true))
-                }
-                ShortcutCard(Icons.Rounded.Star, Palette.Gold, "Favoris", countLabel(state.favorites.size, "chaîne"), Modifier.homeFocus("favorites")) {
-                    state.navigate(Page.Browse(BrowseLane.FAVORITES))
-                }
-                ShortcutCard(Icons.Rounded.History, Palette.Muted, "Récents", countLabel(state.recent.size, "chaîne"), Modifier.homeFocus("recent")) {
-                    state.navigate(Page.Browse(BrowseLane.RECENT))
-                }
-                ShortcutCard(
-                    Icons.Rounded.GridView, Palette.Muted, "Catégories",
-                    if (state.pinnedCategories.isEmpty()) "À épingler" else countLabel(state.pinnedCategories.size, "épinglée"),
-                    Modifier.homeFocus("categories")
-                ) { state.navigate(Page.CategoryPicker()) }
             }
         }
 
@@ -189,7 +164,8 @@ fun HomeScreen(state: AppState) {
                         ChannelCard(channel, isFavorite = channel.id in state.favorites, modifier = Modifier.homeFocus("recent:${channel.id}"),
                             onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, recentChannels) }
                     }
-                    if (recentChannels.size > ROW_LIMIT) SeeAllCard(Modifier.homeFocus("recent:all")) { state.navigate(Page.Browse(BrowseLane.RECENT)) }
+                    // Récents has no drawer item: its full list (with "Retirer") opens from here.
+                    SeeAllCard(Modifier.homeFocus("recent:all")) { state.navigate(Page.Browse(BrowseLane.RECENT)) }
                 }
             }
         }
@@ -203,7 +179,7 @@ fun HomeScreen(state: AppState) {
                         ChannelCard(channel, isFavorite = true, modifier = Modifier.homeFocus("fav:${channel.id}"),
                             onLongClick = { state.toggleFavorite(channel) }) { state.play(channel, favoriteChannels) }
                     }
-                    if (favoriteChannels.size > ROW_LIMIT) SeeAllCard(Modifier.homeFocus("fav:all")) { state.navigate(Page.Browse(BrowseLane.FAVORITES)) }
+                    if (favoriteChannels.size > ROW_LIMIT) SeeAllCard(Modifier.homeFocus("fav:all")) { state.openDestination(NavDest.FAVORITES) }
                 }
             }
         }
@@ -217,13 +193,13 @@ fun HomeScreen(state: AppState) {
                         onLongClick = { state.togglePin(category) }
                     ) { state.navigate(Page.Browse(BrowseLane.ALL, categoryId = category.id)) }
                 }
-                AddCategoryCard(Modifier.homeFocus("cat:add")) { state.navigate(Page.CategoryPicker()) }
+                AddCategoryCard(Modifier.homeFocus("cat:add")) { state.openDestination(NavDest.CATEGORIES) }
             }
         }
 
         item(key = "hints") {
             HintBar(
-                "OK" to "Ouvrir", "OK long" to "Favori / épingler", "RETOUR" to "Haut de page",
+                "OK" to "Ouvrir", "OK long" to "Favori / épingler", "◀" to "Menu",
                 modifier = Modifier.padding(start = Spacing.Side, top = 8.dp)
             )
         }
@@ -239,11 +215,6 @@ private fun greeting(): String {
     }
 }
 
-private fun countLabel(count: Int, noun: String): String = when (count) {
-    0 -> "Aucune"
-    1 -> "1 $noun"
-    else -> "$count ${noun}s"
-}
 
 @Composable
 private fun HomeRow(
@@ -299,24 +270,6 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
     }
 }
 
-@Composable
-private fun ShortcutCard(icon: ImageVector, tint: Color, title: String, subtitle: String, modifier: Modifier, onClick: () -> Unit) {
-    FocusSurface(onClick = onClick, modifier = modifier.size(width = 196.dp, height = 60.dp), outline = Palette.Outline) {
-        Row(
-            Modifier.fillMaxSize().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Box(Modifier.size(34.dp).background(tint.copy(alpha = 0.16f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(19.dp))
-            }
-            Column {
-                Text(title, style = Type.TitleSmall, maxLines = 1)
-                Text(subtitle, style = Type.Caption, color = secondaryColor(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
 
 @Composable
 fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
