@@ -93,10 +93,7 @@ fun HomeScreen(state: AppState) {
     }
 
     LaunchedEffect(Unit) {
-        delay(40)
-        state.homeFocusKey?.let { key -> runCatching { requesters[key]?.requestFocus() } }
-        delay(60)
-        if (!homeHasFocus) runCatching { requester(FIRST_TILE).requestFocus() }
+        focusWhenReady(state.homeFocusKey?.let { requesters[it] }, requester(FIRST_TILE))
     }
 
     // Left navigation guideline: Back opens the drawer on Accueil (Home scrolls back to the top behind it);

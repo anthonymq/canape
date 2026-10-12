@@ -52,6 +52,7 @@ object ChannelText {
     private val notCountries = setOf("TV", "HD", "SD", "FHD", "UHD", "VIP", "PPV", "NEW", "LIVE")
     private val quality = Regex("""(?i)(?<![\p{L}\p{N}])(4K|UHD|FHD|FULL\s*HD|HD|SD|HEVC|H\.?265|50\s*FPS|60\s*FPS|RAW)(?![\p{L}\p{N}])""")
     private val trailingJunk = Regex("""[\s/|\-–·•:‖┃]+$""")
+    private val trailingTag = Regex("""\s*[|┃‖\[]\s*([A-Z]{2,3})\s*[|┃‖\]]?\s*$""")
     private val leadingJunk = Regex("""^[\s/|\-–·•:‖┃]+""")
     private val spaces = Regex("""\s{2,}""")
     private val diacritics = Regex("""\p{Mn}+""")
@@ -108,6 +109,8 @@ object ChannelText {
             .replace(leadingJunk, "")
             .replace(spaces, " ")
             .trim()
+        // "CANADA |FR|" -> "CANADA (FR)": keep the language tag, drop the stray pipes.
+        text = text.replace(trailingTag) { " (${it.groupValues[1]})" }
         val kept = text.replace(trailingJunk, "").replace(leadingJunk, "").replace(spaces, " ").trim()
         val title = (if (keepQuality) kept else stripped).ifBlank { kept.ifBlank { raw.trim() } }
         return Label(title, country, if (stripped.isBlank()) emptyList() else badges.toList())
@@ -276,8 +279,10 @@ object ChannelText {
     private fun tidyMatch(value: String): String {
         // Case first, while the text is still all capitals, then the separator.
         val cased = smartCase(value.replace(versus, " VS ").replace(spaces, " ").trim())
-        return if (versus.containsMatchIn(cased)) cased.replace(versus, " vs. ")
-        else cased.replaceFirst(Regex("""\s+[-–]\s+"""), " vs. ")
+        if (versus.containsMatchIn(cased)) return cased.replace(versus, " vs. ")
+        // "Real Betis - CA Osasuna" is a match; "Victoria, BC - Day 1, Session 1" is a session title.
+        val sides = cased.split(Regex("""\s+[-–]\s+"""), limit = 2)
+        return if (sides.size == 2 && sides.none { side -> side.any(Char::isDigit) }) "${sides[0]} vs. ${sides[1]}" else cased
     }
 
     /** Title-cases names the provider wrote in capitals; short club tags (FC, CA, PSG) stay upper case. */
@@ -295,8 +300,33 @@ object ChannelText {
     }
 
     /** Same match from two naming styles: "Atalanta vs. Venise" and "ATALANTA VS. VENISE". */
-    fun eventKey(info: EventInfo): String? = info.start?.let { start ->
-        normalize(info.title).replace(Regex("""\bvs\b|[^\p{L}\p{N}]+"""), " ").replace(spaces, " ").trim() + "@" + start
+    fun matchTitleKey(info: EventInfo): String =
+        normalize(info.title).replace(Regex("""\bvs\b|[^\p{L}\p{N}]+"""), " ").replace(spaces, " ").trim()
+
+    /**
+     * One entry per match. Providers list the same match under different names and with kickoff times a few
+     * minutes apart (20:53 and 21:00), so titles are compared and starts within 30 minutes are merged.
+     * Keeps the first copy in the given order. Feeds without a start time are never merged.
+     */
+    fun distinctMatches(channels: List<Channel>): List<Channel> {
+        val seen = HashMap<String, MutableList<Long>>()
+        return channels.filter { channel ->
+            val info = channel.event ?: return@filter true
+            val start = info.start ?: return@filter true
+            val starts = seen.getOrPut(matchTitleKey(info)) { mutableListOf() }
+            if (starts.any { kotlin.math.abs(it - start) <= 30 * 60_000L }) false else { starts += start; true }
+        }
+    }
+
+    /** "Aujourd’hui", "Demain" or "Mercredi 14 octobre", for day sections. */
+    fun eventDayLabel(info: EventInfo, now: Long = System.currentTimeMillis()): String {
+        val start = info.start ?: return ""
+        return when (dayIndex(start) - dayIndex(now)) {
+            0L -> "Aujourd’hui"
+            1L -> "Demain"
+            else -> java.text.SimpleDateFormat("EEEE d MMMM", java.util.Locale.FRANCE).format(java.util.Date(start))
+                .replaceFirstChar { it.titlecase(java.util.Locale.FRENCH) }
+        }
     }
 
     /** "Commence aujourd’hui à 18:30" / "Commence mercredi 14 octobre à 00:30". */

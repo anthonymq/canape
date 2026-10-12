@@ -78,7 +78,8 @@ private fun ChannelFinderApp(probe: String? = null) {
         val pages: @Composable () -> Unit = {
             AnimatedContent(
                 targetState = state.page,
-                contentKey = { it::class },
+                // Each lane/category is its own screen (fresh focus and scroll); query and filter edits are not.
+                contentKey = { if (it is Page.Browse) "browse:${it.lane}:${it.categoryId}" else it::class },
                 transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(120)) },
                 label = "page"
             ) { page ->

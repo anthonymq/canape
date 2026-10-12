@@ -9,6 +9,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +36,9 @@ import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.ManageAccounts
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SportsSoccer
 import androidx.compose.material.icons.rounded.Star
@@ -139,7 +143,7 @@ private fun Modifier.graphicsOffset(progress: Float): Modifier = this.then(
 @Composable
 fun LoadErrorScreen(message: String, onRetry: () -> Unit, onEditAccount: () -> Unit) {
     val retryFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { delay(50); runCatching { retryFocus.requestFocus() } }
+    LaunchedEffect(Unit) { focusWhenReady(retryFocus) }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         EmptyState(
             icon = Icons.Rounded.CloudOff,
@@ -292,7 +296,7 @@ fun Callout(icon: ImageVector, tone: Color, surface: Color, text: String) {
 fun SettingsScreen(state: AppState) {
     val context = LocalContext.current
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { delay(50); runCatching { firstFocus.requestFocus() } }
+    LaunchedEffect(Unit) { focusWhenReady(firstFocus) }
     val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
@@ -303,7 +307,10 @@ fun SettingsScreen(state: AppState) {
     Column(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
         ScreenHeader("Channel Finder", "Réglages", trailing = { Clock() })
         Spacer(Modifier.height(28.dp))
-        Column(Modifier.widthIn(max = 720.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+            Modifier.widthIn(max = 720.dp).weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             SettingsRow(
                 icon = Icons.Rounded.Refresh,
                 title = if (state.refreshing) "Actualisation en cours…" else "Actualiser la liste des chaînes",
@@ -317,6 +324,26 @@ fun SettingsScreen(state: AppState) {
                 // The Xtream username is half of the credentials: never show it on a shared screen.
                 subtitle = if (host.isBlank()) "Serveur, utilisateur et mot de passe" else "Serveur : $host"
             ) { state.editAccount() }
+            val audioLabel = when (val code = state.audioPreference) {
+                AUDIO_AUTO -> "Automatique (piste par défaut de la chaîne)"
+                else -> java.util.Locale.forLanguageTag(code).getDisplayLanguage(java.util.Locale.FRENCH)
+                    .replaceFirstChar { it.titlecase(java.util.Locale.FRENCH) }
+            }
+            SettingsRow(
+                icon = Icons.Rounded.RecordVoiceOver,
+                title = "Langue audio préférée : $audioLabel",
+                subtitle = "OK pour changer · utilisée quand une chaîne propose plusieurs langues"
+            ) { state.cycleAudioPreference() }
+            val unavailableCount = state.unavailable.keys.count(state::isUnavailable)
+            SettingsRow(
+                icon = Icons.Rounded.Replay,
+                title = "Réessayer les chaînes indisponibles",
+                subtitle = when (unavailableCount) {
+                    0 -> "Aucune chaîne marquée indisponible"
+                    1 -> "1 chaîne marquée indisponible depuis moins de 12 h"
+                    else -> "$unavailableCount chaînes marquées indisponibles depuis moins de 12 h"
+                }
+            ) { if (unavailableCount > 0) state.clearUnavailable() }
             // Erasing the whole history takes a second press; the row says so, and resets after a few seconds.
             var confirmClear by remember { mutableStateOf(false) }
             LaunchedEffect(confirmClear) { if (confirmClear) { delay(5_000); confirmClear = false } }
@@ -337,7 +364,7 @@ fun SettingsScreen(state: AppState) {
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(12.dp))
         Text(
             "Channel Finder $version · ${number.format(state.channels.size)} chaînes · ${number.format(state.categories.size)} catégories",
             style = Type.Caption, color = Palette.Faint

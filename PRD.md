@@ -114,6 +114,15 @@ The whole TV design guide (foundations, system, styles, components), the TV app 
 
 In full screen, **▶** opens **Audio et sous-titres** when the stream has more than one audio track or any subtitles; the remote's **Last channel** key returns to the previous channel.
 
+### Review 4 (2026-10-12)
+
+- Every screen's initial focus retries until it lands (`focusWhenReady`), and each lane/category is its own screen, so choosing a list from the drawer always moves focus into it. Previously focus could stay in the drawer, and Back then went to Accueil.
+- Lists show their search field only from 15 channels (Favoris usually has none).
+- The preview's favourite is an outlined star icon button that reads "Ajouter aux favoris" / "Retirer des favoris" when focused. Match feeds cannot be favourites (no button, no long press).
+- Événements is sectioned by day (En cours, Aujourd’hui, Demain, then dates); badges inside a section show only the time. The same match is merged when titles match and kickoffs are within 30 minutes (providers disagree by a few minutes). "A - B" becomes "A vs. B" only when neither side contains digits, so session titles such as "Day 1, Session 1" stay as they are.
+- Trailing language tags in group names are tidied: "CANADA |FR" → "CANADA (FR)".
+- Réglages: **Langue audio préférée** (Français → Português → Automatique) and **Réessayer les chaînes indisponibles** (clears all 12-hour marks). The list scrolls if it outgrows the screen.
+
 ## Functional requirements
 
 | ID | Requirement | Current status |

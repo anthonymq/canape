@@ -42,6 +42,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -405,8 +409,18 @@ fun TvTextField(
     val view = androidx.compose.ui.platform.LocalView.current
     LaunchedEffect(editing) {
         if (editing) {
-            delay(30)
-            runCatching { fieldFocus.requestFocus() }
+            // The field may not be ready yet (a screen fading in after a drawer choice): a focus request then
+            // does nothing and focus stays where it was, so Back would act there. Retry until it really lands.
+            repeat(12) {
+                delay(if (it == 0) 30L else 50L)
+                runCatching { fieldFocus.requestFocus() }
+                if (fieldFocused) return@repeat
+            }
+            if (!fieldFocused) {
+                onEditingChange(false)
+                runCatching { outerFocusRequester.requestFocus() }
+                return@LaunchedEffect
+            }
             keyboard?.show()
             // Back first closes the keyboard, and the keyboard swallows that Back. Treat the keyboard
             // going away as the end of editing, so one Back is enough.
@@ -581,10 +595,13 @@ data class Notice(val text: String, val icon: ImageVector? = null, val tint: Col
 
 /** Status of an event feed: live now, start time, generic match feed, or nothing scheduled. */
 @Composable
-fun EventTag(channel: Channel, modifier: Modifier = Modifier) {
+fun EventTag(channel: Channel, modifier: Modifier = Modifier, timeOnly: Boolean = false) {
     val info = channel.event ?: return
     val status = info.status()
-    val label = ChannelText.eventTimeLabel(info).uppercase()
+    // Under a day header ("Aujourd’hui"), the badge only needs the time.
+    val label = (if (timeOnly && status == ChannelText.EventStatus.UPCOMING && info.start != null)
+        java.text.SimpleDateFormat("HH:mm", java.util.Locale.FRANCE).format(java.util.Date(info.start))
+    else ChannelText.eventTimeLabel(info)).uppercase()
     when (status) {
         ChannelText.EventStatus.LIVE -> Row(
             modifier.background(Palette.Live, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 2.dp),
@@ -607,4 +624,58 @@ fun EventTag(channel: Channel, modifier: Modifier = Modifier) {
 @Composable
 fun UnavailableTag(modifier: Modifier = Modifier) {
     Badge("INDISPONIBLE", modifier, tone = Palette.Error)
+}
+
+/**
+ * Favourite toggle as an outlined icon button (TV buttons guideline: icon buttons for on/off actions such as
+ * favourites). Focused, it spells out the action, so the star is never ambiguous.
+ */
+@Composable
+fun FavoriteButton(isFavorite: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val interaction = remember { MutableInteractionSource() }
+    val focused by interaction.collectIsFocusedAsState()
+    val action = if (isFavorite) "Retirer des favoris" else "Ajouter aux favoris"
+    FocusSurface(
+        onClick = onClick,
+        interactionSource = interaction,
+        modifier = modifier.heightIn(min = 42.dp).widthIn(min = 42.dp)
+            .semantics { contentDescription = action },
+        shape = CircleShape,
+        container = Color.Transparent,
+        outline = Palette.Faint,
+        focusedScale = 1.1f
+    ) {
+        Row(
+            Modifier.align(Alignment.Center).padding(horizontal = if (focused) 18.dp else 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline,
+                contentDescription = null,
+                modifier = Modifier.size(22.dp),
+                tint = when {
+                    focused -> LocalContentColor.current
+                    isFavorite -> Palette.Gold
+                    else -> LocalContentColor.current
+                }
+            )
+            if (focused) Text(action, style = Type.Label, maxLines = 1)
+        }
+    }
+}
+
+/**
+ * Initial focus for a screen that may still be fading in: a request on a node that is not placed yet does
+ * nothing, which used to leave focus in the drawer (and Back then acted there). Tries each requester in order,
+ * retrying for up to ~750 ms until one really takes focus.
+ */
+suspend fun focusWhenReady(vararg requesters: FocusRequester?): Boolean {
+    repeat(15) { attempt ->
+        delay(if (attempt == 0) 16L else 50L)
+        requesters.forEach { requester ->
+            if (requester != null && runCatching { requester.requestFocus(FocusDirection.Enter) }.getOrDefault(false)) return true
+        }
+    }
+    return false
 }

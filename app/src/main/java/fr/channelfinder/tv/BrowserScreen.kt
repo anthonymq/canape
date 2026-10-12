@@ -144,9 +144,11 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
         if (index >= 0 && listState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
             listState.scrollToItem((index - 2).coerceAtLeast(0))
         }
-        delay(60)
-        val focused = index >= 0 && runCatching { selectedRowFocus.requestFocus(); true }.getOrDefault(false)
-        if (!focused) runCatching { searchFocus.requestFocus() }
+        focusWhenReady(
+            selectedRowFocus.takeIf { index >= 0 },
+            searchFocus,
+            qualityFocus.getValue(state.qualityFilter)
+        )
     }
 
     // A new query or lane starts again from the best match.
@@ -184,8 +186,10 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
             .onFocusChanged { screenHasFocus = it.hasFocus }
             .padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.Top, bottom = 20.dp)
     ) {
+        // A search field is noise on a handful of channels; it appears from 15 channels (or when in use).
+        val showSearch = base.size >= 15 || page.query.isNotBlank() || page.lane == BrowseLane.ALL
         ScreenHeader(eyebrow, title) {
-            TvTextField(
+            if (showSearch) TvTextField(
                 value = page.query,
                 onValueChange = { state.replaceTop(page.copy(query = it)) },
                 // The drawer's Rechercher covers every channel; this field searches the list on screen.
@@ -263,10 +267,21 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(vertical = 6.dp, horizontal = 10.dp)
                 ) {
+                    // Événements: day sections (En cours, Aujourd’hui, Demain…), like the Catégories sections.
+                    val sectioned = page.lane == BrowseLane.EVENTS && page.categoryId == null && page.query.isBlank()
                     itemsIndexed(results, key = { _, channel -> channel.id }) { index, channel ->
                         val isSelected = channel.id == selected?.id
+                        val section = if (sectioned) eventSection(channel) else null
+                        Column {
+                        if (section != null && (index == 0 || eventSection(results[index - 1]) != section)) {
+                            Text(
+                                section.uppercase(), style = Type.Eyebrow, color = Palette.Accent,
+                                modifier = Modifier.padding(start = 4.dp, top = if (index == 0) 0.dp else 10.dp, bottom = 2.dp)
+                            )
+                        }
                         ChannelRow(
                             channel = channel,
+                            timeOnly = sectioned,
                             // The group name only where it changes; the preview always shows it.
                             showCategory = page.categoryId == null &&
                                 (index == 0 || results[index - 1].categoryDisplay != channel.categoryDisplay),
@@ -278,8 +293,10 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
                                 .focusProperties { right = watchFocus },
                             onFocus = { state.selectedChannelId = channel.id },
                             onPlay = { state.play(channel, results) },
-                            onToggleFavorite = { state.toggleFavorite(channel) }
+                            // A match feed shows other programmes after the match: not a favourite.
+                            onToggleFavorite = if (channel.event != null) null else ({ state.toggleFavorite(channel) })
                         )
+                        }
                     }
                 }
                 if (selected != null) {
@@ -347,6 +364,7 @@ private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: Channe
 @Composable
 private fun ChannelRow(
     channel: Channel,
+    timeOnly: Boolean,
     showCategory: Boolean,
     isFavorite: Boolean,
     isUnavailable: Boolean,
@@ -354,7 +372,7 @@ private fun ChannelRow(
     modifier: Modifier,
     onFocus: () -> Unit,
     onPlay: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: (() -> Unit)?
 ) {
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
@@ -378,7 +396,7 @@ private fun ChannelRow(
                 Text(channel.displayName, style = Type.Label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     if (isUnavailable) UnavailableTag()
-                    EventTag(channel)
+                    EventTag(channel, timeOnly = timeOnly)
                     if (channel.event == null) channel.countryTag?.let { Badge(it) }
                     if (channel.event == null) channel.badges.take(2).forEach { Badge(it) }
                     if (showCategory || channel.event != null) {
@@ -551,12 +569,7 @@ private fun PreviewPane(
         Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             TvButton("Regarder", onWatch, Modifier.focusRequester(watchFocus), icon = Icons.Rounded.PlayArrow, primary = true)
-            TvButton(
-                if (isFavorite) "Favori" else "Ajouter",
-                onToggleFavorite,
-                icon = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarOutline,
-                iconTint = if (isFavorite) Palette.Gold else null
-            )
+            if (channel.event == null) FavoriteButton(isFavorite, onToggleFavorite)
             if (onRemoveRecent != null) TvButton("Retirer", onRemoveRecent, icon = Icons.Rounded.Clear)
         }
 
@@ -568,3 +581,14 @@ private fun plural(count: Int) = if (count > 1) "s" else ""
 /** Down from a filter chip lands on the list, never on the preview buttons that sit lower right. */
 private fun Modifier.downToList(list: FocusRequester, hasResults: Boolean): Modifier =
     if (hasResults) focusProperties { down = list } else this
+
+/** Day section of a match feed in Événements. */
+private fun eventSection(channel: Channel): String? {
+    val info = channel.event ?: return null
+    return when (info.status()) {
+        ChannelText.EventStatus.LIVE -> "En cours"
+        ChannelText.EventStatus.UPCOMING -> ChannelText.eventDayLabel(info)
+        ChannelText.EventStatus.FEED -> "Pendant les matchs"
+        else -> "Terminés ou sans programme"
+    }
+}

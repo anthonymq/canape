@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val UNAVAILABLE_FOR_MS = 12 * 60 * 60 * 1000L
+const val AUDIO_AUTO = "auto"
 
 /** Viewer's own countries first in each lane (ISO codes). */
 private val preferredCountries = mapOf(
@@ -83,11 +84,36 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         private set
 
     /** Audio languages to prefer, most wanted first: the viewer's last choice, then French and Portuguese. */
+    /** Preferred audio language: an ISO code, or [AUDIO_AUTO] for the stream's default track. French by default. */
+    var audioPreference by mutableStateOf(prefs.getString("audio_language", null) ?: "fr")
+        private set
+
     val audioLanguages: List<String>
-        get() = (listOfNotNull(prefs.getString("audio_language", null)) + listOf("fr", "pt")).distinct()
+        get() = if (audioPreference == AUDIO_AUTO) emptyList() else listOf(audioPreference, "fr", "pt").distinct()
 
     fun rememberAudioLanguage(language: String?) {
-        if (!language.isNullOrBlank() && language != "und") prefs.edit().putString("audio_language", language).apply()
+        if (language.isNullOrBlank() || language == "und") return
+        audioPreference = language
+        prefs.edit().putString("audio_language", language).apply()
+    }
+
+    /** Réglages: Français → Português → Automatique → Français. */
+    fun cycleAudioPreference() {
+        val next = when (audioPreference) {
+            "fr" -> "pt"
+            "pt" -> AUDIO_AUTO
+            else -> "fr"
+        }
+        audioPreference = next
+        prefs.edit().putString("audio_language", next).apply()
+    }
+
+    /** Réglages: lift every "unavailable" mark so those channels are tried normally again. */
+    fun clearUnavailable() {
+        val count = unavailable.size
+        unavailable.clear()
+        persistHealth()
+        notice = Notice(if (count == 1) "1 chaîne sera réessayée" else "$count chaînes seront réessayées", Icons.Rounded.Refresh)
     }
 
     /** Channel watched before the current one, for the remote's "last channel" key. */
@@ -367,7 +393,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
             lane == BrowseLane.EVENTS -> return eventsInOrder(channels.filter { it.lane == lane.label })
                 // Providers publish most matches several times (main/backup groups, two naming styles):
                 // list each match once, keeping a copy that has not failed. All stay reachable from their category.
-                .distinctBy { channel -> channel.event?.let(ChannelText::eventKey) ?: channel.id }
+                .let(ChannelText::distinctMatches)
             else -> channels.filter { it.lane == lane.label }
         }
         // Working channels first, then the viewer's own countries, then general-interest groups.
@@ -404,19 +430,18 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     fun upcomingEventCount(): Pair<Int, Int> {
         val now = System.currentTimeMillis()
         // Each match once, as in the Événements list.
-        val live = HashSet<String>()
-        val soon = HashSet<String>()
-        channels.forEach { channel ->
-            if (channel.lane != BrowseLane.EVENTS.label) return@forEach
+        val matches = ChannelText.distinctMatches(channels.filter { it.lane == BrowseLane.EVENTS.label })
+        var live = 0
+        var soon = 0
+        matches.forEach { channel ->
             val info = channel.event ?: return@forEach
-            val key = ChannelText.eventKey(info) ?: channel.id
             when (info.status(now)) {
-                ChannelText.EventStatus.LIVE -> live += key
-                ChannelText.EventStatus.UPCOMING -> if ((info.start ?: 0) - now < 36 * 3_600_000L) soon += key
+                ChannelText.EventStatus.LIVE -> live++
+                ChannelText.EventStatus.UPCOMING -> if ((info.start ?: 0) - now < 36 * 3_600_000L) soon++
                 else -> Unit
             }
         }
-        return live.size to soon.size
+        return live to soon
     }
 
     fun search(all: List<Channel>, query: String, quality: ChannelText.VideoQuality? = null): List<Channel> {

@@ -85,9 +85,7 @@ fun CategoryPickerScreen(state: AppState, page: Page.CategoryPicker) {
         if (index >= 0 && state.categoryListState.layoutInfo.visibleItemsInfo.none { it.index == index }) {
             state.categoryListState.scrollToItem((index - 2).coerceAtLeast(0))
         }
-        delay(60)
-        val focused = target != null && runCatching { targetFocus.requestFocus(); true }.getOrDefault(false)
-        if (!focused) runCatching { searchFocus.requestFocus() }
+        focusWhenReady(targetFocus.takeIf { target != null }, searchFocus)
     }
     var lastQuery by remember { mutableStateOf(page.query) }
     LaunchedEffect(page.query) {
