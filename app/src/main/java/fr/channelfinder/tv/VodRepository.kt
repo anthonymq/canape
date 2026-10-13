@@ -16,6 +16,38 @@ data class LibraryItem(
     val overview: String = "", val year: String = "", val rating: String = "", val backdrop: String = ""
 ) {
     val searchKey: String by lazy { ChannelText.normalize(title) }
+    val presentation: LibraryPresentation by lazy { libraryPresentation(title, year) }
+    val sortKey: String by lazy { ChannelText.normalize(presentation.title) }
+}
+
+data class LibraryPresentation(val title: String, val year: Int?, val quality: String?)
+
+private val libraryYearSuffix = Regex("\\s+[\\[(]((?:19|20)\\d{2})[\\])]$")
+private val libraryQualitySuffix = Regex("\\s+(?:[\\[(](4K|UHD|FHD|HD|SD|2160p|1080p|720p)[\\])]|[-|]\\s*(4K|UHD|FHD|HD|SD|2160p|1080p|720p))$", RegexOption.IGNORE_CASE)
+private val libraryDatedSuffix = Regex("\\s+[-|]\\s*((?:19|20)\\d{2})(?:\\s+(4K|UHD|FHD|HD|SD|2160p|1080p|720p))?$", RegexOption.IGNORE_CASE)
+
+internal fun libraryPresentation(rawTitle: String, metadataYear: String): LibraryPresentation {
+    var title = rawTitle.trim()
+    var year = metadataYear.trim().takeIf { it.matches(Regex("(?:19|20)\\d{2}")) }?.toInt()
+    var quality: String? = null
+    val datedSuffix = libraryDatedSuffix.find(title)
+    if (datedSuffix != null && (year == null || year == datedSuffix.groupValues[1].toInt())) {
+        year = datedSuffix.groupValues[1].toInt()
+        quality = datedSuffix.groupValues[2].takeIf { it.isNotBlank() }?.uppercase()
+        title = title.substring(0, datedSuffix.range.first).trimEnd()
+    }
+    repeat(2) {
+        val qualityMatch = libraryQualitySuffix.find(title)
+        val yearMatch = libraryYearSuffix.find(title)
+        if (quality == null && qualityMatch != null) {
+            quality = qualityMatch.groupValues.drop(1).first { it.isNotBlank() }.uppercase()
+            title = title.substring(0, qualityMatch.range.first).trimEnd()
+        } else if (yearMatch != null && (year == null || year == yearMatch.groupValues[1].toInt())) {
+            year = yearMatch.groupValues[1].toInt()
+            title = title.substring(0, yearMatch.range.first).trimEnd()
+        }
+    }
+    return LibraryPresentation(title, year, quality)
 }
 
 data class LibraryCatalog(val categories: List<ChannelCategory>, val items: List<LibraryItem>)

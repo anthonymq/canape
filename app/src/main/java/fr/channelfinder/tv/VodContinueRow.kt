@@ -16,7 +16,7 @@ import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 
 @Composable
-fun VodContinueRow(state: AppState, session: LibrarySession, entries: List<VodWatch>, focus: FocusRequester?) {
+fun VodContinueRow(state: AppState, session: LibrarySession, entries: List<VodWatch>, focus: FocusRequester?, firstFocus: FocusRequester? = null) {
     val account = state.account ?: return
     var pendingRemoval by remember { mutableStateOf<VodWatch?>(null) }
     val targetKey = entries.firstOrNull { it.key == session.resumeFocusId }?.key ?: entries.first().key
@@ -27,6 +27,7 @@ fun VodContinueRow(state: AppState, session: LibrarySession, entries: List<VodWa
                 Column(Modifier.width(Cinema.ResumeWidth), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     CardSurface({ state.navigate(Page.VodPlayer(entry.item, entry.kind, entry.series)) },
                         Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                            .then(if (firstFocus != null && entry.key == entries.first().key) Modifier.focusRequester(firstFocus) else Modifier)
                             .then(if (focus != null && entry.key == targetKey) Modifier.focusRequester(focus) else Modifier)
                             .onFocusChanged {
                             if (it.hasFocus) { session.highlighted = entry.displayItem; session.resumeFocusId = entry.key; session.focusedId = null }

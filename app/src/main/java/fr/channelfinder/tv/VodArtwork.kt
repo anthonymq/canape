@@ -55,12 +55,13 @@ fun VodProgress(watch: VodWatch, modifier: Modifier = Modifier) {
 @Composable
 fun VodPoster(item: LibraryItem, watch: VodWatch?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val largeText = LocalDensity.current.fontScale > 1.15f
+    val presentation = item.presentation
     var artworkLoaded by remember(item.artwork) { mutableStateOf(false) }
     CardSurface(onClick, modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Cinema.CardRadius), container = Cinema.Panel, focusedScale = 1f) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(if (largeText) Cinema.LargePosterRatio else Cinema.PosterRatio), contentAlignment = Alignment.Center) {
-                if (!artworkLoaded) Text(item.title, style = Type.Label, maxLines = 4, overflow = TextOverflow.Ellipsis,
+                if (!artworkLoaded) Text(presentation.title, style = Type.Label, maxLines = 4, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(Spacing.Gutter), color = Palette.Muted)
                 if (item.artwork.isNotBlank()) AsyncImage(item.artwork, null, Modifier.fillMaxSize(),
                     onSuccess = { artworkLoaded = true }, onError = { artworkLoaded = false },
@@ -68,8 +69,11 @@ fun VodPoster(item: LibraryItem, watch: VodWatch?, modifier: Modifier = Modifier
                 if (watch?.completed == true) Text("✓ Vu", style = Type.Badge, color = Palette.OnSurface,
                     modifier = Modifier.align(Alignment.TopStart).padding(8.dp).background(Cinema.Background.copy(alpha = 0.9f), RoundedCornerShape(4.dp)).padding(6.dp))
             }
-            Text(item.title, style = Type.Caption, color = Palette.OnSurface, maxLines = 2,
+            Text(presentation.title, style = Type.Caption, color = Palette.OnSurface, maxLines = 2,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp).heightIn(min = 36.dp))
+            val metadata = listOfNotNull(presentation.year?.toString(), presentation.quality).joinToString(" · ")
+            if (metadata.isNotBlank()) Text(metadata, style = Type.Caption, color = Palette.Muted, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp))
             if (watch != null && !watch.completed && watch.positionMs >= 5_000) VodProgress(watch, Modifier.padding(horizontal = 8.dp))
             Spacer(Modifier.height(4.dp))
         }

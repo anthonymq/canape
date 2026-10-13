@@ -2,7 +2,11 @@ package fr.channelfinder.tv
 
 import android.os.CancellationSignal
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.material.icons.Icons
@@ -13,19 +17,53 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Text
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+enum class LibrarySort(val label: String) {
+    PROVIDER("Ordre du fournisseur"), TITLE("Titre A–Z"), YEAR("Année décroissante")
+}
+
+internal fun libraryRows(items: List<LibraryItem>, query: String, category: String?, sort: LibrarySort,
+    checkActive: () -> Unit): List<LibraryItem> {
+    val tokens = ChannelText.tokens(query)
+    val rows = items.filter { item ->
+        checkActive()
+        (category == null || item.categoryId == category) && tokens.all { it in item.searchKey }
+    }
+    if (sort == LibrarySort.PROVIDER) return rows
+    return rows.sortedWith { left, right ->
+        checkActive()
+        when (sort) {
+            LibrarySort.TITLE -> left.sortKey.compareTo(right.sortKey)
+            LibrarySort.YEAR -> (right.presentation.year ?: 0).compareTo(left.presentation.year ?: 0)
+            LibrarySort.PROVIDER -> 0
+        }
+    }
+}
+
+internal fun libraryScrollDistance(offset: Float, size: Float, containerSize: Float, clearance: Float): Float = when {
+    size > containerSize - 2 * clearance -> offset - clearance
+    offset < clearance -> offset - clearance
+    offset + size > containerSize - clearance -> offset + size - containerSize + clearance
+    else -> 0f
+}
 
 class LibrarySession(val account: XcAccount?) {
     var catalog by mutableStateOf<LibraryCatalog?>(null)
     var category by mutableStateOf<String?>(null)
     var query by mutableStateOf("")
+    var sort by mutableStateOf(LibrarySort.PROVIDER)
+        private set
     var focusedId: String? = null
     var resumeFocusId: String? = null
     var highlighted by mutableStateOf<LibraryItem?>(null)
@@ -33,10 +71,20 @@ class LibrarySession(val account: XcAccount?) {
     var grid by mutableStateOf(LazyGridState())
         private set
 
+    fun selectSort(value: LibrarySort) {
+        if (sort == value) return
+        sort = value
+        resetPosition()
+    }
+
     fun selectCategory(id: String?) {
         if (category == id && query.isBlank()) return
         category = id
         query = ""
+        resetPosition()
+    }
+
+    private fun resetPosition() {
         focusedId = null
         resumeFocusId = null
         highlighted = null
@@ -55,7 +103,9 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
     var retry by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var categoryOpen by remember { mutableStateOf(false) }
+    var sortOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
+    var enterContent by remember { mutableStateOf<(() -> Unit)?>(null) }
     val cancellation = remember(session, retry) { CancellationSignal() }
     DisposableEffect(cancellation) { onDispose { cancellation.cancel() } }
     LaunchedEffect(session, retry) {
@@ -81,37 +131,63 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
     }
     Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top),
         verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Text(page.kind.title, style = Type.Headline, modifier = Modifier.weight(1f), color = Palette.OnSurface)
+        Row(Modifier.onPreviewKeyEvent { event ->
+            if (!editing && event.key == Key.DirectionDown && enterContent != null) {
+                if (event.type == KeyEventType.KeyDown) enterContent?.invoke()
+                true
+            } else false
+        }, horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(page.kind.title, style = Type.Headline, color = Palette.OnSurface)
             TvTextField(session.query, { session.query = it }, "Rechercher un titre", editing, { editing = it },
-                icon = Icons.Rounded.Search, modifier = Modifier.width(320.dp).focusRequester(headerFocus))
+                icon = Icons.Rounded.Search, modifier = Modifier.weight(1f).focusRequester(headerFocus))
             TvButton("Catégories", { categoryOpen = true }, icon = Icons.Rounded.GridView, compact = true, enabled = catalog != null)
+            TvButton("Trier", { sortOpen = true }, compact = true, enabled = catalog != null)
         }
         if (catalog == null) {
             if (error != null) LibraryStatus(error.orEmpty(), true) { retry++ } else LibrarySkeleton()
         } else {
-            LibraryGrid(state, session, page.kind, editing, headerFocus)
+            LibraryGrid(state, session, page.kind, editing, headerFocus) { enterContent = it }
             if (categoryOpen) LibraryCategoryDialog(catalog, session, onClose = { categoryOpen = false })
+            if (sortOpen) LibrarySortDialog(session) { sortOpen = false }
         }
     }
 }
 
 @Composable
-private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryKind, editing: Boolean, headerFocus: FocusRequester) {
+private fun LibrarySortDialog(session: LibrarySession, onClose: () -> Unit) {
+    val focus = remember { FocusRequester() }
+    Dialog(onDismissRequest = onClose) {
+        Column(Modifier.background(Cinema.Background, RoundedCornerShape(Cinema.CardRadius)).padding(Spacing.Top),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
+            Text("Trier les titres", style = Type.Headline, color = Palette.OnSurface)
+            LibrarySort.entries.forEach { sort ->
+                FocusSurface({ session.selectSort(sort); onClose() },
+                    Modifier.fillMaxWidth().then(if (sort == session.sort) Modifier.focusRequester(focus) else Modifier),
+                    container = if (sort == session.sort) Palette.AccentDeep else Cinema.Panel, focusedScale = 1f) {
+                    Text((if (sort == session.sort) "✓ " else "") + sort.label, style = Type.Label, modifier = Modifier.padding(Spacing.Row))
+                }
+            }
+        }
+        LaunchedEffect(Unit) { focusWhenReady(focus) }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryKind, editing: Boolean, headerFocus: FocusRequester,
+    onEntryChanged: ((() -> Unit)?) -> Unit) {
     val catalog = session.catalog ?: return
     val account = state.account ?: return
     val history = state.watchHistory.entries(account)
     val progress = remember(history, kind) { history.filter { it.kind == kind }.associateBy { it.item.id } }
     val resume = remember(history, kind) { continueWatching(history, kind) }
-    val loadedRows = backgroundCalculation(catalog, session.query, session.category) { checkActive ->
-        val tokens = ChannelText.tokens(session.query)
-        catalog.items.filter { item ->
-            checkActive()
-            (session.category == null || item.categoryId == session.category) && tokens.all { it in item.searchKey }
-        }
+    val loadedRows = backgroundCalculation(catalog, session.query, session.category, session.sort) { checkActive ->
+        libraryRows(catalog.items, session.query, session.category, session.sort, checkActive)
     }
     val rows = loadedRows.orEmpty()
     val focus = remember { FocusRequester() }
+    val firstFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
     val searchActive = session.query.isNotBlank()
     val showResume = session.showsContinueWatching(resume)
     val restoreResume = showResume && (session.resumeFocusId != null || session.focusedId == null)
@@ -119,7 +195,19 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
     val category = catalog.categories.firstOrNull { it.id == session.category }?.name
         ?: if (kind == LibraryKind.MOVIES) "Tous les films" else "Toutes les séries"
     val columns = if (LocalDensity.current.fontScale > 1.15f) 5 else 6
+    DisposableEffect(session.grid, loadedRows, showResume) {
+        onEntryChanged(if (loadedRows == null || (rows.isEmpty() && !showResume)) null else {
+            {
+                scope.launch {
+                    session.grid.scrollToItem(0)
+                    focusWhenReady(firstFocus)
+                }
+            }
+        })
+        onDispose { onEntryChanged(null) }
+    }
     val focusInputs = listOf(session.category, session.grid, resume.map { it.key })
+    val currentlyEditing by rememberUpdatedState(editing)
     var restoredInputs by remember { mutableStateOf<List<Any?>?>(null) }
     LaunchedEffect(session.category, session.grid, resume.map { it.key }, loadedRows != null) {
         if (loadedRows == null || restoredInputs == focusInputs) return@LaunchedEffect
@@ -128,6 +216,10 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
             return@LaunchedEffect
         }
         kotlinx.coroutines.delay(50)
+        if (currentlyEditing) {
+            restoredInputs = focusInputs
+            return@LaunchedEffect
+        }
         if (restoreResume) {
             session.grid.scrollToItem(0)
             focusWhenReady(focus)
@@ -141,10 +233,16 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
         }
         restoredInputs = focusInputs
     }
+    val clearance = with(LocalDensity.current) { 8.dp.toPx() }
+    val bringIntoView = remember(clearance) { object : BringIntoViewSpec {
+        override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+            libraryScrollDistance(offset, size, containerSize, clearance)
+    } }
+    CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoView) {
     LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize(), state = session.grid,
         horizontalArrangement = Arrangement.spacedBy(Cinema.GridGap), verticalArrangement = Arrangement.spacedBy(Cinema.GridGap),
         contentPadding = PaddingValues(8.dp)) {
-        if (showResume) item(span = { GridItemSpan(maxLineSpan) }, key = "resume") { VodContinueRow(state, session, resume, if (restoreResume) focus else null) }
+        if (showResume) item(span = { GridItemSpan(maxLineSpan) }, key = "resume") { VodContinueRow(state, session, resume, if (restoreResume) focus else null, firstFocus) }
         item(span = { GridItemSpan(maxLineSpan) }, key = "heading") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(if (searchActive) "Résultats pour « ${session.query} »" else category, style = Type.Title, color = Palette.OnSurface,
@@ -160,11 +258,13 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
         }
         items(rows, key = { "poster:${it.id}" }) { item ->
             VodPoster(item, progress[item.id], Modifier
+                .then(if (!showResume && item.id == rows.firstOrNull()?.id) Modifier.focusRequester(firstFocus) else Modifier)
                 .then(if (!restoreResume && item.id == target?.id) Modifier.focusRequester(focus) else Modifier)
                 .onFocusChanged { if (it.hasFocus) { session.focusedId = item.id; session.resumeFocusId = null; session.highlighted = item } }) {
                 state.navigate(if (kind == LibraryKind.MOVIES) Page.MovieDetails(item) else Page.Episodes(item))
             }
         }
+    }
     }
 }
 
