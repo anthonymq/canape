@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/app-icon.png" width="96" height="96" alt="Canapé app icon">
+  <img src="docs/assets/canape-wordmark.png" width="640" alt="Canapé — blue sofa symbol with coral play button and white wordmark">
 </p>
 
 # Canapé
