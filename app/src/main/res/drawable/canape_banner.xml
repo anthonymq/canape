@@ -1,14 +1,14 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="320dp"
-    android:height="180dp"
-    android:viewportWidth="640"
-    android:viewportHeight="360">
-    <path android:fillColor="#101827" android:pathData="M0,0H640V360H0Z" />
-    <path android:fillColor="#3868BC" android:pathData="M88,116H152Q184,116 184,148V212Q184,244 152,244H88Q56,244 56,212V148Q56,116 88,116Z" />
-    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="7"
-        android:strokeLineJoin="round" android:pathData="M84,154H156V203H84Z M104,218H136" />
-    <path android:fillColor="#FFFFFF" android:pathData="M112,165L136,179L112,193Z" />
-    <path android:fillColor="#00000000" android:strokeColor="#F3F6FC" android:strokeWidth="7"
-        android:strokeLineJoin="round" android:strokeLineCap="square"
-        android:pathData="M254,156H218V204H254 M274,204L292,156L310,204 M280,188H304 M330,204V156L366,204V156 M386,204L404,156L422,204 M392,188H416 M442,204V156H478V180H442 M538,156H502V204H538 M502,180H532 M512,144L528,132" />
-</vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="320dp" android:height="180dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#101827" />
+        </shape>
+    </item>
+    <item android:width="88dp" android:height="88dp"
+        android:gravity="left|center_vertical" android:left="20dp">
+        <bitmap android:src="@mipmap/ic_launcher" android:gravity="fill" android:filter="true" />
+    </item>
+    <item android:width="176dp" android:height="52dp"
+        android:gravity="left|center_vertical" android:left="120dp"
+        android:drawable="@drawable/canape_wordmark" />
+</layer-list>

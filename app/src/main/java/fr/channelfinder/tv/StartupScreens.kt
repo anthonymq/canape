@@ -8,6 +8,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -35,7 +36,6 @@ import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Key
-import androidx.compose.material.icons.rounded.LiveTv
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.ManageAccounts
 import androidx.compose.material.icons.rounded.Person
@@ -59,11 +59,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -77,13 +77,11 @@ import java.util.Locale
 
 @Composable
 fun AppMark(size: androidx.compose.ui.unit.Dp = 56.dp) {
-    Box(
-        Modifier.size(size).clip(RoundedCornerShape(size / 4))
-            .background(Brush.linearGradient(listOf(Color(0xFF5B8FE8), Color(0xFF2B4F9E)))),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(Icons.Rounded.LiveTv, contentDescription = null, tint = Color.White, modifier = Modifier.size(size * 0.56f))
-    }
+    Image(
+        painter = painterResource(R.mipmap.ic_launcher),
+        contentDescription = null,
+        modifier = Modifier.size(size)
+    )
 }
 
 @Composable

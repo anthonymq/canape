@@ -2,6 +2,8 @@
 
 _Last updated: 2026-10-13 (reviewed usability)_
 
+Branding update (2026-10-13): the user-selected sofa/C icon is used in Android launcher resources, setup/loading `AppMark`, and the TV launcher banner. The README uses the approved horizontal wordmark. Signed release build and lint pass with existing warnings; setup and focused launcher screenshots are verified on the isolated Google TV emulator. This source update does not publish a new APK release.
+
 ## Product summary
 
 Canapé is a Google TV / Android TV app for finding live channels in a large user-supplied Xtream Codes playlist. It is designed for a viewer who finds typical IPTV apps difficult to navigate. The playlist currently contains 24,057 live channels, so the product prioritizes direct destinations, local search, simple favorites, and a live preview while browsing.
