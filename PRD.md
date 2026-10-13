@@ -1,6 +1,6 @@
 # Easy IPTV Product Requirements
 
-_Last updated: 2026-10-12 (movies and series)_
+_Last updated: 2026-10-13 (responsiveness)_
 
 ## Product summary
 
@@ -101,7 +101,7 @@ When returning from full-screen playback, restore the selected channel and list 
 
 ### Full-screen playback
 
-Media3/ExoPlayer plays the selected live stream with sound; there is no seek bar (live TV). A channel banner (logo, name, badges, position in list, clock, previous/next channel) shows on start and on any key, and hides after 5 s; OK toggles it. Up/Down (and CH+/CH−) zap through the list the channel was opened from; the banner follows immediately and the stream switches once the viewer pauses (500 ms). A failed stream is retried once silently; then a card explains the failure in plain language (HTTP 407, 404, connection limits, unsupported format…) with **Réessayer** and **Chaîne suivante**. Back returns to the previous screen (an in-app back stack) with the last watched channel selected.
+Media3/ExoPlayer plays the selected live stream with sound; there is no seek bar (live TV). A channel banner (logo, name, badges, position in list, clock, previous/next channel) shows on start and on any key, and hides after 5 s; OK toggles it. Up/Down (and CH+/CH−) zap through the list the channel was opened from; the banner follows immediately and the stream switches once the viewer pauses (250 ms). A failed stream is retried twice silently; then a card explains the failure in plain language (HTTP 407, 404, connection limits, unsupported format…) with **Réessayer** and **Chaîne suivante**. Back returns to the previous screen (an in-app back stack) with the last watched channel selected.
 
 ### TV guide
 
@@ -157,6 +157,8 @@ In full screen, **▶** opens **Audio et sous-titres** when the stream has more 
 
 ### Movies and series
 
+Category changes keep Continue Watching visible across movie and series categories, clear title search and reset the grid and focus to the top. Selecting the current category without an active search preserves the current position; Back from details or playback still restores browsing context.
+
 **Films** and **Séries** are separate navigation drawer destinations. They load categories and titles only when opened, using the saved account and the provider's `get_vod_categories` / `get_vod_streams` and `get_series_categories` / `get_series` actions. Category filters and accent-insensitive title search run locally. Selecting a series fetches `get_series_info`; episodes are ordered by numeric season and episode, with a season filter. Movies use `/movie/…` and episodes `/series/…`, preserving the provider container extension. Full-screen Media3 controls support remote pause and seeking. Back restores the catalog, filter, selected row and scroll position, including episode lists.
 
 The VOD interface uses six poster columns (five at enlarged text), a fixed cinematic title banner, scoped search and a searchable category overlay. Movie details fetch provider synopsis/backdrop/year/rating via get_vod_info and offer Reprendre or Recommencer. Series show season chips and three episode columns (two at enlarged text), with individual progress and a next-episode action. Watch progress is stored locally under a SHA-256 account key, capped at 100 metadata records. It saves every five seconds, on pause/seek/background and exit; actual end or 95% watched marks completion. Continue Watching shows unfinished movies and each series' most recently watched episode if unfinished, survives app restarts, and supports long OK to remove an entry. No cross-device sync is provided.
@@ -190,7 +192,7 @@ Verified on the 1080p Google TV emulator at normal and 130% text: six/five-colum
 - **Stream URL:** Live playback is built as `/live/{username}/{password}/{stream_id}.ts` by `XtreamRepository.streamUrl`. The provider redirects these requests to separate stream servers.
 - **Playback:** `buildStreamPlayer` in `MainActivity.kt` creates the ExoPlayer used for both browser preview and full-screen playback. It uses a `DefaultHttpDataSource` with a VLC User-Agent, cross-protocol redirects, and explicit timeouts. The browser preview has its own player, is muted, and is released when the browser leaves composition.
 - **Persistence:** `CredentialStore.kt` encrypts account data with AES/GCM and Android Keystore. Channel favorites, category favorites, and recent IDs use local SharedPreferences.
-- **Performance:** The catalog and ID lookup map are held in memory (about 135 MB PSS on the emulator with the full catalog). Channel results render in a LazyColumn; search and lane filtering are local. Counts are grouped for Home and the category picker.
+- **Performance:** The catalog and ID lookup map are held in memory (about 135 MB PSS in an earlier emulator check). Channel results render in a LazyColumn. Live sorting, country counts, ranked search and empty-result recovery run on Dispatchers.Default, as do movie/series search and category filtering. Calculations read a consistent Compose snapshot; cancelled queries cannot publish obsolete results. Category ranking is cached per label and cleared with the catalog's category labels. Home opens before a downloaded catalog is written to disk. Counts are grouped for Home and the category picker. Actual stream startup still depends on the provider and network.
 - **Network policy:** `network_security_config.xml` permits cleartext traffic to all hosts, because Xtream stream servers are not known in advance. Credentials are present in Xtream request and playback URLs, so avoid logging them or sharing live-session logs.
 
 ## Product quality and acceptance checks
@@ -220,6 +222,10 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 | 8 | Cold start from cache ≈ 4 s on the emulator with a debug build (≈ 3.3 s reading the cache); a release build on hardware should be faster. Not yet measured on a target device. |
 
 ## Known issues
+
+- **Category navigation verification (2026-10-13):** reproduced hidden movie Continue Watching before the fix. After reinstall, unfinished movies and the Luck S1 E1 entry remain visible in provider categories on the Google TV emulator. Back restores movie selection and position. All 19 unit tests pass, including a category change from grid item 120, independent movie/series sessions and unchanged-category restoration.
+
+- **Responsiveness verification (2026-10-13):** live sorting/search and movie/series filtering now run off the UI thread. Search scans check cancellation between items, movie/series title keys warm in the background, and category ranks are reused. Debug build and 14 unit tests pass, including worker execution, snapshot consistency and cancellation. Emulator checks cover initial live focus, TF1 best-match selection, typing focus, missing results and muted preview. The 53,537-title movie catalog returns 25 Matrix matches while keeping focus in search; Back dismisses the keyboard. Zero-jank performance on a physical TV remains unverified; emulator cache-read timings still vary widely.
 
 - **Distribution (2026-10-12):** the app is named Easy IPTV in its launcher label, banner and settings. The existing application ID is retained. Local unit tests and debug APK build pass; GitHub Actions builds and uploads a debug-signed Google TV APK (see README). Production signing is not configured.
 

@@ -58,6 +58,7 @@ object ChannelText {
     private val diacritics = Regex("""\p{Mn}+""")
 
     private val categoryLabels = java.util.concurrent.ConcurrentHashMap<String, Label>()
+    private val categoryRanks = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     @Volatile private var categorySuffixes: Map<String, String> = emptyMap()
 
@@ -83,6 +84,7 @@ object ChannelText {
         }
         categorySuffixes = suffixes
         categoryLabels.clear()
+        categoryRanks.clear()
     }
 
     /**
@@ -378,12 +380,13 @@ object ChannelText {
     // General-interest groups first, regional and local ones last. Keywords only, never provider IDs.
     private val generalGroups = Regex("""(?i)g[ée]n[ée]ral|g[ée]n[ée]raliste|\btnt\b|^\W*(portugal|brasil|france)\W*$""")
     private val secondaryGroups = Regex("""(?i)r[ée]gion|local|dom-tom|pluto|backup|\bvip\b|hevc|\bsd\b""")
+    private val infoGroups = Regex("""(?i)\binfo""")
 
-    fun categoryRank(category: String): Int {
+    fun categoryRank(category: String): Int = categoryRanks.getOrPut(category) {
         val title = categoryLabel(category).title
-        return when {
+        when {
             generalGroups.containsMatchIn(title) -> 0
-            Regex("""(?i)\binfo""").containsMatchIn(title) -> 1
+            infoGroups.containsMatchIn(title) -> 1
             secondaryGroups.containsMatchIn(title) -> 3
             else -> 2
         }

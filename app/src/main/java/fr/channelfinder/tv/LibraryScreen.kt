@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Text
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 class LibrarySession(val account: XcAccount?) {
@@ -28,7 +30,21 @@ class LibrarySession(val account: XcAccount?) {
     var resumeFocusId: String? = null
     var highlighted by mutableStateOf<LibraryItem?>(null)
     val list = LazyListState()
-    val grid = LazyGridState()
+    var grid by mutableStateOf(LazyGridState())
+        private set
+
+    fun selectCategory(id: String?) {
+        if (category == id && query.isBlank()) return
+        category = id
+        query = ""
+        focusedId = null
+        resumeFocusId = null
+        highlighted = null
+        grid = LazyGridState()
+    }
+
+    fun showsContinueWatching(entries: List<VodWatch>): Boolean =
+        entries.isNotEmpty() && query.isBlank()
 }
 
 @Composable
@@ -53,6 +69,12 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
         } catch (failure: CatalogException) { error = failure.message }
     }
     val catalog = session.catalog
+    LaunchedEffect(catalog) {
+        if (catalog != null) withContext(Dispatchers.Default) {
+            val context = currentCoroutineContext()
+            catalog.items.forEach { item -> context.ensureActive(); item.searchKey }
+        }
+    }
     Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top),
         verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -64,32 +86,43 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
         if (catalog == null) {
             if (error != null) LibraryStatus(error.orEmpty(), true) { retry++ } else LibrarySkeleton()
         } else {
-            LibraryGrid(state, session, page.kind)
+            LibraryGrid(state, session, page.kind, editing)
             if (categoryOpen) LibraryCategoryDialog(catalog, session, onClose = { categoryOpen = false })
         }
     }
 }
 
 @Composable
-private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryKind) {
+private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryKind, editing: Boolean) {
     val catalog = session.catalog ?: return
     val account = state.account ?: return
     val history = state.watchHistory.entries(account)
     val progress = remember(history, kind) { history.filter { it.kind == kind }.associateBy { it.item.id } }
     val resume = remember(history, kind) { continueWatching(history, kind) }
-    val rows = remember(catalog, session.query, session.category) {
+    val loadedRows = backgroundCalculation(catalog, session.query, session.category) { checkActive ->
         val tokens = ChannelText.tokens(session.query)
-        catalog.items.filter { item -> (session.category == null || item.categoryId == session.category) && tokens.all { it in item.searchKey } }
+        catalog.items.filter { item ->
+            checkActive()
+            (session.category == null || item.categoryId == session.category) && tokens.all { it in item.searchKey }
+        }
     }
+    val rows = loadedRows.orEmpty()
     val focus = remember { FocusRequester() }
     val searchActive = session.query.isNotBlank()
-    val showResume = resume.isNotEmpty() && !searchActive && session.category == null
+    val showResume = session.showsContinueWatching(resume)
     val restoreResume = showResume && (session.resumeFocusId != null || session.focusedId == null)
     val target = rows.firstOrNull { it.id == session.focusedId } ?: rows.firstOrNull()
     val category = catalog.categories.firstOrNull { it.id == session.category }?.name
         ?: if (kind == LibraryKind.MOVIES) "Tous les films" else "Toutes les séries"
     val columns = if (LocalDensity.current.fontScale > 1.15f) 5 else 6
-    LaunchedEffect(session.category, resume.map { it.key }) {
+    val focusInputs = listOf(session.category, session.grid, resume.map { it.key })
+    var restoredInputs by remember { mutableStateOf<List<Any?>?>(null) }
+    LaunchedEffect(session.category, session.grid, resume.map { it.key }, loadedRows != null) {
+        if (loadedRows == null || restoredInputs == focusInputs) return@LaunchedEffect
+        if (editing) {
+            restoredInputs = focusInputs
+            return@LaunchedEffect
+        }
         kotlinx.coroutines.delay(50)
         if (restoreResume) {
             session.grid.scrollToItem(0)
@@ -100,6 +133,7 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
             if (session.grid.layoutInfo.visibleItemsInfo.none { it.index == index }) session.grid.scrollToItem(index)
             focusWhenReady(focus)
         }
+        restoredInputs = focusInputs
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
         VodHero(session.highlighted ?: target, if (kind == LibraryKind.MOVIES) "À découvrir · Films" else "À découvrir · Séries",
@@ -117,8 +151,8 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
         }
         if (rows.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
-                LibraryStatus("Aucun titre dans cette sélection.", false) {}
-                TvButton("Afficher tous les titres", { session.query = ""; session.category = null })
+                LibraryStatus(if (loadedRows == null) "Recherche…" else "Aucun titre dans cette sélection.", false) {}
+                if (loadedRows != null) TvButton("Afficher tous les titres", { session.query = ""; session.category = null })
             }
         }
         items(rows, key = { "poster:${it.id}" }) { item ->

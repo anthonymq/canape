@@ -27,10 +27,10 @@ fun LibraryCategoryDialog(catalog: LibraryCatalog, session: LibrarySession, onCl
             val rows = remember(query, catalog) { val tokens = ChannelText.tokens(query); catalog.categories.filter { category -> tokens.all { it in category.searchKey } } }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.ListGap), contentPadding = PaddingValues(Spacing.ListPadding)) {
                 item {
-                    CategoryChoice("Toutes les catégories", session.category == null, Modifier.focusRequester(focus)) { session.category = null; onClose() }
+                    CategoryChoice("Toutes les catégories", session.category == null, Modifier.focusRequester(focus)) { session.selectCategory(null); onClose() }
                 }
                 items(rows, key = { it.id }) { category ->
-                    CategoryChoice(category.name, session.category == category.id) { session.category = category.id; onClose() }
+                    CategoryChoice(category.name, session.category == category.id) { session.selectCategory(category.id); onClose() }
                 }
                 if (rows.isEmpty()) item { Text("Aucune catégorie trouvée", style = Type.Body, color = Palette.Muted) }
             }

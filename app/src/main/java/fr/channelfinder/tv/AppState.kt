@@ -284,8 +284,8 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         try {
             val catalog = withContext(Dispatchers.IO) { repository.loadCatalog(current) { loadStep = it } }
             applyCatalog(catalog, System.currentTimeMillis())
-            withContext(Dispatchers.IO) { cache.save(current, catalog) }
             resetTo(Page.Home)
+            withContext(Dispatchers.IO) { cache.save(current, catalog) }
         } catch (error: CatalogException) {
             resetTo(Page.LoadError(error.message.orEmpty()))
         } catch (error: Exception) {
@@ -303,7 +303,6 @@ class AppState(context: Context, private val scope: CoroutineScope) {
                 val catalog = withContext(Dispatchers.IO) { repository.loadCatalog(newAccount) { loadStep = it } }
                 withContext(Dispatchers.IO) {
                     credentialStore.save(newAccount)
-                    cache.save(newAccount, catalog)
                 }
                 if (newAccount != account) {
                     recent.clear()
@@ -312,6 +311,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
                 account = newAccount
                 applyCatalog(catalog, System.currentTimeMillis())
                 resetTo(Page.Home)
+                withContext(Dispatchers.IO) { cache.save(newAccount, catalog) }
             } catch (error: CatalogException) {
                 onError(error.message.orEmpty())
             } catch (error: Exception) {
@@ -454,11 +454,14 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         return live to soon
     }
 
-    fun search(all: List<Channel>, query: String, quality: ChannelText.VideoQuality? = null): List<Channel> {
+    fun search(all: List<Channel>, query: String, quality: ChannelText.VideoQuality? = null, checkActive: () -> Unit = {}): List<Channel> {
         val base = if (quality == null) all else all.filter { it.quality == quality }
         val tokens = ChannelText.tokens(query)
         if (tokens.isEmpty()) return base
-        return base.mapNotNull { channel -> ChannelText.score(channel, tokens)?.let { channel to it } }
+        return base.mapNotNull { channel ->
+            checkActive()
+            ChannelText.score(channel, tokens)?.let { channel to it }
+        }
             .sortedWith(compareBy({ it.second }, { if (isUnavailable(it.first.id)) 1 else 0 }))
             .map { it.first }
     }

@@ -9,11 +9,15 @@ A native Android TV / Google TV starter app built around quick channel discovery
 3. Home provides direct destinations for **France**, **Português**, **Sports**, **Favorites**, **Recent**, and the category picker.
 4. Search filters the local channel catalog immediately. The channel browser uses a two-pane layout: focused channel rows on the left and a muted live preview on the right. The preview waits briefly after focus settles, so fast D-pad browsing does not repeatedly start streams. OK opens full-screen playback; Back restores the selected channel.
 
+Live browsing and movie/series search compute results in the background so catalog work does not block remote input or typing. Pending searches show **Recherche…**; obsolete queries cannot replace the current results. During live playback, the channel banner responds immediately and switching starts after a 250 ms pause between presses. Stream startup depends on the provider and connection.
+
 ## Movies and series
 
 Open **Films** or **Séries** in the navigation drawer for a poster grid and a cinematic title banner. Search titles locally or open the searchable **Catégories** picker. Movie details show the provider's synopsis, **Regarder / Reprendre**, and **Recommencer**. Series offer season filters, episode cards and individual progress.
 
 **Continuer à regarder** saves unfinished movies and the most recent episode of each series across app restarts, separately for each account. OK resumes at the saved position; long OK removes the entry. Episode cards support long OK to start over. Playback saves progress every five seconds and on pause, seeking, backgrounding and exit. Finished items (actual end or 95% watched) leave Continue Watching; series offer the next episode on the episode page or after playback ends. History holds at most 100 items on this TV; it does not sync to other devices. Catalogs stay in memory and reload after an app restart. No titles enter live-channel favorites, recents or the TV guide. Artwork, metadata, formats and seeking support depend on the provider.
+
+Continue Watching remains visible when choosing a movie or series category, including titles from other categories. Choosing a different category clears title search and starts at the top. Selecting the current category without an active search keeps your place; Back from details or playback restores the selection and scroll position.
 
 ## Category favorites
 

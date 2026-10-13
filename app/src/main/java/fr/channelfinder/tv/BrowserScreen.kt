@@ -102,26 +102,34 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
     // Favorites/recents are captured when the list opens so un-starring a row does not yank focus away.
     // Récents is the exception: removing one from the preview must update the list.
     val recentKey = if (page.lane == BrowseLane.RECENT && page.categoryId == null) state.recent.toList() else null
-    val base = remember(state.channels, page.lane, page.categoryId, recentKey) { state.channelsFor(page.lane, page.categoryId) }
+    val loadedBase = backgroundCalculation(state.channels, page.lane, page.categoryId, recentKey) {
+        state.channelsFor(page.lane, page.categoryId)
+    }
+    val base = loadedBase.orEmpty()
     // Events rarely carry a quality tag, and favorites/recents are the viewer's own picks: no quality filter there.
     val qualityApplies = page.categoryId != null || page.lane !in qualityExemptLanes
     val quality = if (qualityApplies) state.qualityFilter else null
     // Country filter: offered when the list mixes at least two countries with two channels or more each.
     // A country gets a chip only with a real share of the list (5%, at least 2 channels), so a few
     // stray channels do not add chips that overflow the row.
-    val countries = if (!qualityApplies) emptyList() else remember(base) {
+    val loadedCountries = if (!qualityApplies) emptyList() else backgroundCalculation(base) {
         val minimum = maxOf(2, base.size / 20)
         base.groupingBy { it.country }.eachCount()
             .filter { (code, count) -> code != null && count >= minimum }
             .entries.sortedByDescending { it.value }.take(6).map { it.key!! }
             .takeIf { it.size >= 2 }.orEmpty()
     }
+    val countries = loadedCountries.orEmpty()
     val country = page.country?.takeIf { it in countries }
     val filterRowShown = qualityApplies || countries.isNotEmpty()
-    val results = remember(base, page.query, quality, country) {
-        state.search(if (country == null) base else base.filter { it.country == country }, page.query, quality)
+    val loadedResults = backgroundCalculation(base, page.query, quality, country) { checkActive ->
+        state.search(if (country == null) base else base.filter { it.country == country }, page.query, quality, checkActive)
     }
-    val selected = results.firstOrNull { it.id == state.selectedChannelId } ?: results.firstOrNull()
+    val calculating = loadedBase == null || loadedCountries == null || loadedResults == null
+    val results = if (calculating) emptyList() else loadedResults.orEmpty()
+    val filter = listOf(page.lane, page.categoryId, page.query, quality, page.country)
+    var lastFilter by remember { mutableStateOf(filter) }
+    val selected = results.firstOrNull { lastFilter == filter && it.id == state.selectedChannelId } ?: results.firstOrNull()
     val listState = state.browserListState
 
     val searchFocus = remember { FocusRequester() }
@@ -148,9 +156,12 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (page.startSearch) {
-            state.replaceTop(page.copy(startSearch = false))
+    var initialFocusRestored by remember { mutableStateOf(false) }
+    LaunchedEffect(calculating) {
+        if (calculating || initialFocusRestored) return@LaunchedEffect
+        if (page.startSearch || editing) {
+            initialFocusRestored = true
+            if (page.startSearch) state.replaceTop(page.copy(startSearch = false))
             return@LaunchedEffect
         }
         val index = results.indexOfFirst { it.id == selected?.id }
@@ -163,17 +174,17 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
             searchFocus,
             qualityFocus.getValue(state.qualityFilter)
         )
+        initialFocusRestored = true
     }
 
     // A new query or lane starts again from the best match.
-    var lastFilter by remember { mutableStateOf(listOf(page.lane, page.categoryId, page.query, quality, country)) }
-    LaunchedEffect(page.lane, page.categoryId, page.query, quality, country) {
-        val filter = listOf(page.lane, page.categoryId, page.query, quality, country)
+    LaunchedEffect(page.lane, page.categoryId, page.query, quality, country, calculating) {
+        if (calculating) return@LaunchedEffect
         if (filter != lastFilter) {
-            lastFilter = filter
             state.selectedChannelId = null
             listState.scrollToItem(0)
         }
+        lastFilter = filter
     }
     LaunchedEffect(selected?.id) { if (selected != null && state.selectedChannelId == null) state.selectedChannelId = selected.id }
 
@@ -190,6 +201,7 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
         country?.let(ChannelText::countryName)
     ).joinToString(" · ").replace(" · en ", " en ")
     val eyebrow = when {
+        calculating -> "Recherche…"
         category != null && page.query.isBlank() -> listOfNotNull("Catégorie", category.countryTag, countLabel).joinToString(" · ")
         page.query.isNotBlank() -> "${number.format(results.size)} résultat${plural(results.size)} pour « ${page.query.trim()} »"
         else -> countLabel
@@ -269,7 +281,8 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
 
         if (results.isEmpty()) {
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                BrowseEmptyState(page, state, quality, country) {
+                if (calculating) Text("Recherche…", style = Type.Body, color = Palette.Muted)
+                else BrowseEmptyState(page, state, quality, country, base) {
                     scope.launch { focusWhenReady(selectedRowFocus, searchFocus) }
                 }
             }
@@ -361,16 +374,20 @@ fun BrowserScreen(state: AppState, page: Page.Browse) {
 }
 
 @Composable
-private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: ChannelText.VideoQuality?, country: String?, onRecover: () -> Unit) {
+private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: ChannelText.VideoQuality?, country: String?, base: List<Channel>, onRecover: () -> Unit) {
+    val recovery = backgroundCalculation(base, page.query, quality) { checkActive ->
+        (state.search(base, page.query, quality, checkActive).isNotEmpty()) to (state.search(base, page.query, checkActive = checkActive).isNotEmpty())
+    }
     when {
-        country != null && state.search(state.channelsFor(page.lane, page.categoryId), page.query, quality).isNotEmpty() -> EmptyState(
+        recovery == null -> Text("Recherche…", style = Type.Body, color = Palette.Muted)
+        country != null && recovery.first -> EmptyState(
             Icons.Rounded.SearchOff,
             "Aucun résultat pour ce pays",
             "Essayez les autres pays de cette sélection."
         ) {
             TvButton("Tous les pays", { state.replaceTop(page.copy(country = null)); onRecover() }, icon = Icons.Rounded.Clear, primary = true)
         }
-        quality != null && state.search(state.channelsFor(page.lane, page.categoryId), page.query).isNotEmpty() -> EmptyState(
+        quality != null && recovery.second -> EmptyState(
             Icons.Rounded.SearchOff,
             "Aucune chaîne en ${quality.label} ici",
             "Cette sélection existe dans d’autres qualités."

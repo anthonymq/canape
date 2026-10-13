@@ -201,7 +201,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     LaunchedEffect(pendingIndex) {
         val target = playlist[pendingIndex]
         if (target != page.channelId) {
-            delay(500)
+            delay(250)
             state.zapTo(target)
         }
     }
