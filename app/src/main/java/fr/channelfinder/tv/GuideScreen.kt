@@ -28,11 +28,20 @@ import kotlinx.coroutines.sync.Semaphore
 fun GuideScreen(state: AppState, page: Page.Guide) {
     val account = state.account ?: return
     val allChannels = remember(page.playlist, state.channelsById) { page.playlist.mapNotNull(state.channelsById::get) }
-    var onlyAvailable by remember { mutableStateOf(true) }
+    var onlyAvailable by remember { mutableStateOf(false) }
+    var channelNavigation by remember { mutableStateOf(true) }
     var summaryRevision by remember { mutableIntStateOf(0) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val availability = remember(account, page.playlist, summaryRevision, now / (15 * 60_000L)) { mutableStateMapOf<String, Boolean>() }
-    val channels = allChannels.filter { !onlyAvailable || availability[it.id] != false }
+    var filterAvailability by remember(account, page.playlist) { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    var filterAnchorId by remember(account, page.playlist) { mutableStateOf(page.channelId) }
+    LaunchedEffect(availability.toMap(), onlyAvailable, channelNavigation, page.channelId) {
+        if (!channelNavigation) {
+            filterAvailability = availability.toMap()
+            filterAnchorId = page.channelId
+        }
+    }
+    val channels = guideChannelsForDisplay(allChannels, onlyAvailable, filterAvailability, filterAnchorId)
     LaunchedEffect(Unit) { while (true) { delay(30_000); now = System.currentTimeMillis() } }
     if (channels.isEmpty()) {
         val showAllFocus = remember { FocusRequester() }
@@ -44,7 +53,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
                 Text("Aucun programme en cours disponible", style = Type.Title, color = Palette.OnSurface)
                 Text("Les chaînes restent accessibles en direct.", style = Type.Caption, color = Palette.Muted)
                 Spacer(Modifier.height(Spacing.Gutter))
-                TvButton("Toutes les chaînes", { onlyAvailable = false }, Modifier.focusRequester(showAllFocus), primary = true)
+                TvButton("Toutes les chaînes de cette sélection", { onlyAvailable = false }, Modifier.focusRequester(showAllFocus), primary = true)
                 Spacer(Modifier.height(10.dp))
                 TvButton("Réessayer", { summaryRevision++ })
             }
@@ -65,7 +74,6 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
     val cancellation = remember(account, channel.id, retry, now / (15 * 60_000L)) { CancellationSignal() }
     DisposableEffect(cancellation) { onDispose { cancellation.cancel() } }
     var actionLabel by remember { mutableStateOf("Choisir") }
-    var channelNavigation by remember { mutableStateOf(true) }
     val channelFocus = remember { FocusRequester() }
     val programmeFocus = remember { FocusRequester() }
     val watchFocus = remember { FocusRequester() }
@@ -102,7 +110,8 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Guide TV", style = Type.Display, color = Palette.OnSurface)
-                Text("Programmes du fournisseur · horaires de la TV", style = Type.Caption, color = Palette.Muted)
+                Text("${page.scope} · ${allChannels.size} chaînes", style = Type.Caption, color = Palette.Muted,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             TvButton("Actualiser", ::refresh, Modifier.focusRequester(refreshFocus)
                 .onFocusChanged { if (it.isFocused) { actionLabel = "Actualiser"; channelNavigation = false } }
@@ -111,7 +120,7 @@ fun GuideScreen(state: AppState, page: Page.Guide) {
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text("CHAÎNES", style = Type.Eyebrow, color = Palette.Faint)
-            TvChip("Avec programme", onlyAvailable, { onlyAvailable = true },
+            TvChip("Programme en cours", onlyAvailable, { onlyAvailable = true },
                 Modifier.focusProperties { down = currentFocus }
                     .onFocusChanged { if (it.isFocused) { actionLabel = "Filtrer"; channelNavigation = false } }, compact = true)
             TvChip("Toutes", !onlyAvailable, { onlyAvailable = false },

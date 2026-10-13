@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class GuideDataTest {
+    @Test fun filteringKeepsTheRequestedChannelWhenItsScheduleIsMissing() {
+        fun channel(id: String) = Channel(id, "Channel $id", "category", "Category", "", "", "France")
+        val channels = listOf(channel("requested"), channel("missing"), channel("scheduled"), channel("pending"))
+        val availability = mapOf("requested" to false, "missing" to false, "scheduled" to true)
+        assertEquals(listOf("requested", "scheduled", "pending"),
+            guideChannelsForDisplay(channels, true, availability, "requested").map(Channel::id))
+        assertEquals(channels, guideChannelsForDisplay(channels, false, availability, "requested"))
+        assertTrue(guideChannelsForDisplay(emptyList(), true, availability, "requested").isEmpty())
+    }
+
     @Test fun decodesUtf8AndPreservesPlainText() {
         assertEquals("Émission du soir", decodeGuideText("w4ltaXNzaW9uIGR1IHNvaXI="))
         assertEquals("Journal télévisé", decodeGuideText("Journal télévisé"))

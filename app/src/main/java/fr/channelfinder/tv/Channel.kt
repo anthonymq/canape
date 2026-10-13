@@ -82,5 +82,5 @@ sealed interface Page {
         val country: String? = null
     ) : Page
     data class Player(val channelId: String, val playlist: List<String>) : Page
-    data class Guide(val channelId: String, val playlist: List<String>) : Page
+    data class Guide(val channelId: String, val playlist: List<String>, val scope: String = "Sélection de chaînes") : Page
 }

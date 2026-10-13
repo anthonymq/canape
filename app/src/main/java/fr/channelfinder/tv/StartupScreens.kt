@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -168,6 +172,14 @@ fun SetupScreen(state: AppState, page: Page.Setup) {
     var editingField by remember { mutableStateOf(-1) }
     val fieldFocus = remember { List(3) { FocusRequester() } }
     val connectFocus = remember { FocusRequester() }
+    val formTargets = remember { List(4) { BringIntoViewRequester() } }
+    var focusedFormItem by remember { mutableIntStateOf(-1) }
+    LaunchedEffect(focusedFormItem, editingField, error) {
+        if (focusedFormItem >= 0) formTargets[focusedFormItem].bringIntoView()
+    }
+
+    fun formFocus(index: Int) = Modifier.bringIntoViewRequester(formTargets[index])
+        .onFocusChanged { if (it.hasFocus) focusedFormItem = index }
 
     LaunchedEffect(Unit) {
         delay(60)
@@ -195,14 +207,15 @@ fun SetupScreen(state: AppState, page: Page.Setup) {
     }
 
     Row(
-        Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top),
+        Modifier.fillMaxSize().imePadding().padding(horizontal = Spacing.Side, vertical = Spacing.Top),
         horizontalArrangement = Arrangement.spacedBy(56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(0.85f)) {
+        Column(Modifier.weight(0.85f).fillMaxHeight().verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.Center) {
             AppMark()
             Spacer(Modifier.height(24.dp))
-            Text("CHANNEL FINDER", style = Type.Eyebrow, color = Palette.Accent)
+            Text("EASY IPTV", style = Type.Eyebrow, color = Palette.Accent)
             Spacer(Modifier.height(8.dp))
             Text(if (existing == null) "Connectez votre service TV" else "Modifier le compte", style = Type.Display, color = Palette.OnSurface)
             Spacer(Modifier.height(12.dp))
@@ -215,20 +228,21 @@ fun SetupScreen(state: AppState, page: Page.Setup) {
             Feature(Icons.Rounded.Search, "Recherche instantanée dans toutes vos chaînes")
             Feature(Icons.Rounded.Star, "Favoris et dernières chaînes à portée de main")
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)) {
             FieldLabel("Adresse du serveur")
             TvTextField(
                 value = server, onValueChange = { server = it }, placeholder = "http://serveur:port",
                 editing = editingField == 0, onEditingChange = { editingField = if (it) 0 else -1 },
                 icon = Icons.Rounded.Dns, keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next,
-                onImeAction = { editingField = 1 }, outerFocusRequester = fieldFocus[0], modifier = Modifier.fillMaxWidth()
+                onImeAction = { editingField = 1 }, outerFocusRequester = fieldFocus[0], modifier = Modifier.fillMaxWidth().then(formFocus(0))
             )
             FieldLabel("Utilisateur")
             TvTextField(
                 value = username, onValueChange = { username = it }, placeholder = "Nom d’utilisateur",
                 editing = editingField == 1, onEditingChange = { editingField = if (it) 1 else -1 },
                 icon = Icons.Rounded.Person, imeAction = ImeAction.Next,
-                onImeAction = { editingField = 2 }, outerFocusRequester = fieldFocus[1], modifier = Modifier.fillMaxWidth()
+                onImeAction = { editingField = 2 }, outerFocusRequester = fieldFocus[1], modifier = Modifier.fillMaxWidth().then(formFocus(1))
             )
             FieldLabel("Mot de passe")
             TvTextField(
@@ -236,7 +250,7 @@ fun SetupScreen(state: AppState, page: Page.Setup) {
                 editing = editingField == 2, onEditingChange = { editingField = if (it) 2 else -1 },
                 icon = Icons.Rounded.Key, keyboardType = KeyboardType.Password, password = true, imeAction = ImeAction.Done,
                 onImeAction = { runCatching { connectFocus.requestFocus() } }, outerFocusRequester = fieldFocus[2],
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth().then(formFocus(2))
             )
             Spacer(Modifier.height(4.dp))
             Callout(
@@ -249,7 +263,7 @@ fun SetupScreen(state: AppState, page: Page.Setup) {
                 TvButton(
                     if (state.connecting) "Connexion…" else "Se connecter",
                     onClick = ::submit,
-                    modifier = Modifier.focusRequester(connectFocus),
+                    modifier = Modifier.focusRequester(connectFocus).then(formFocus(3)),
                     icon = Icons.Rounded.Lock,
                     primary = true,
                     enabled = !state.connecting

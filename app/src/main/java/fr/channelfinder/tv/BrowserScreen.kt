@@ -397,12 +397,15 @@ private fun BrowseEmptyState(page: Page.Browse, state: AppState, quality: Channe
         page.query.isNotBlank() -> EmptyState(
             Icons.Rounded.SearchOff,
             "Aucun résultat pour « ${page.query.trim()} »",
-            if (page.lane == BrowseLane.ALL && page.categoryId == null) "Vérifiez l’orthographe ou essayez un nom plus court, par exemple « TF1 »."
+            if (page.lane == BrowseLane.ALL && page.categoryId == null) "Essayez un autre nom, par exemple TF1."
             else "Rien dans cette sélection. Essayez de chercher dans toutes les chaînes."
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (page.lane != BrowseLane.ALL || page.categoryId != null) {
-                    TvButton("Chercher partout", { state.replaceTop(page.copy(lane = BrowseLane.ALL, categoryId = null)) },
+                    TvButton("Chercher partout", {
+                        state.setQuality(null)
+                        state.replaceTop(page.copy(lane = BrowseLane.ALL, categoryId = null, country = null))
+                    },
                         icon = Icons.Rounded.Search, primary = true)
                 }
                 TvButton("Effacer la recherche", { state.replaceTop(page.copy(query = "")); onRecover() }, icon = Icons.Rounded.Clear)

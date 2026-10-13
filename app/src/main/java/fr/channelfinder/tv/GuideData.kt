@@ -10,6 +10,12 @@ import java.util.Date
 import java.util.Locale
 import kotlin.io.encoding.Base64
 
+internal fun guideChannelsForDisplay(
+    channels: List<Channel>, onlyWithProgramme: Boolean, availability: Map<String, Boolean>, selectedId: String
+): List<Channel> = channels.filter {
+    !onlyWithProgramme || it.id == selectedId || availability[it.id] != false
+}
+
 data class TvProgramme(val title: String, val description: String, val start: Long, val end: Long) {
     val key: String get() = "$start:$end:$title"
     fun isLive(now: Long): Boolean = start <= now && now < end

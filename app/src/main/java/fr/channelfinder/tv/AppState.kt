@@ -473,13 +473,24 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     }
 
     private fun guideHome(): Page {
-        val list = channelsFor(BrowseLane.FRANCE, null).filter { qualityFilter == null || it.quality == qualityFilter }
-            .ifEmpty { channelsFor(BrowseLane.FRANCE, null) }.ifEmpty { channels }
-        return list.firstOrNull()?.let { Page.Guide(it.id, list.map(Channel::id)) } ?: Page.Home
+        val france = channelsFor(BrowseLane.FRANCE, null)
+        val filtered = france.filter { qualityFilter == null || it.quality == qualityFilter }
+        val list = filtered.ifEmpty { france }.ifEmpty { channels }
+        val scope = listOfNotNull(if (france.isEmpty()) "Toutes les chaînes" else "France",
+            qualityFilter?.label.takeIf { filtered.isNotEmpty() }).joinToString(" · ")
+        return list.firstOrNull()?.let { Page.Guide(it.id, list.map(Channel::id), scope) } ?: Page.Home
     }
 
     fun openGuide(channel: Channel, playlist: List<Channel>) {
-        navigate(Page.Guide(channel.id, playlist.map(Channel::id)))
+        val origin = page
+        val scope = if (origin is Page.Browse) {
+            val selection = origin.categoryId?.let { categoriesById[it]?.displayName } ?: origin.lane.label
+            listOfNotNull(selection, qualityFilter?.label.takeIf {
+                origin.categoryId != null || origin.lane !in setOf(BrowseLane.FAVORITES, BrowseLane.RECENT, BrowseLane.EVENTS)
+            }, origin.country?.let(ChannelText::countryName),
+                origin.query.takeIf(String::isNotBlank)?.let { "Recherche « $it »" }).joinToString(" · ")
+        } else "Sélection de lecture"
+        navigate(Page.Guide(channel.id, playlist.map(Channel::id), scope))
     }
 
     fun watchFromGuide(channel: Channel, playlist: List<Channel>) {
