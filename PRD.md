@@ -1,6 +1,6 @@
 # Easy IPTV Product Requirements
 
-_Last updated: 2026-10-13 (responsiveness)_
+_Last updated: 2026-10-13 (reviewed usability)_
 
 ## Product summary
 
@@ -40,6 +40,8 @@ The interface must work with D-pad focus and OK/Back actions. It should make the
 4. Connection, authentication, and unexpected-response failures are shown in plain language on the form, which keeps what the viewer typed. A failed load for a saved account shows **Réessayer** / **Modifier le compte**.
 5. **Réglages** (gear on Home) offers: refresh the channel list, change the account (server shown, never the username), and clear recents.
 
+The setup form scrolls inside its own pane. Focus reveals fields and the connection action with enlarged text or an inline validation error; the HTTP warning stays in the form. One Back closes the keyboard and ends editing.
+
 Many Xtream providers only offer HTTP and redirect stream requests to other servers (often bare IP addresses), so the app permits cleartext traffic to any host. The setup screen warns that HTTP does not protect account details or streams in transit. Keep this warning visible; encrypted local storage does not encrypt network traffic.
 
 ### Navigation drawer
@@ -55,6 +57,8 @@ Compact layout verified on the 1080p Google TV emulator: five complete channel c
 Home should answer “what can I watch quickly?” It is a vertical stack of rows: four lane cards (France, Português, Sports, Événements), **Reprendre** (recent channels with logos, OK plays directly, ending with "Tout voir"), **Mes favoris**, and **Catégories épinglées**. Search, Favoris, Catégories and Réglages are in the drawer. The France card has focus when Home opens; returning to Home restores the last focused card. Back from anywhere below the first card scrolls to the top and focuses France; Back from France leaves the app (no confirmation).
 
 Pinned category shortcuts show their category label and channel count. Selecting a shortcut opens the category's channel list directly. Category favorites are stored locally by Xtream category ID, not by parsing the category label.
+
+Home keeps contextual OK/long-OK hints below its scrolling content and shows the focused channel/programme or category. Channel cards prioritize two-line names and programmes instead of repeated category labels; cards share the tallest height in each row. Removing a favorite or pin transfers focus to the nearest surviving card. The last favorite returns focus to France; the last pin focuses Épingler. Pinned and empty cards grow for enlarged text.
 
 ### Événements (event feeds)
 
@@ -97,6 +101,8 @@ Lanes list the viewer's own countries first (Português: Portugal then Brazil; S
 
 Search ranks matches (exact name, then name prefix, then word prefix, then anywhere), ignores accents, and requires every typed word to match. Channel names are cleaned for display only (`ChannelText.kt`): country prefixes such as `|FR|` become a badge and quality suffixes (HD, FHD, 4K, HEVC…) become badges. Raw names are still searched.
 
+**Chercher partout** preserves the query and removes lane/category, country and quality restrictions. Clearing quality also updates the saved quality preference; the unrestricted state remains visible in the filter chips.
+
 When returning from full-screen playback, restore the selected channel and list position. While the stream buffers, show a clear progress message. If preview playback fails, explain that the viewer can still try full-screen playback. An empty search result should remove the preview and provide a clear empty state. The D-pad must be able to move from the search field into the results.
 
 ### Full-screen playback
@@ -111,9 +117,9 @@ Schedules use `get_simple_data_table` with the channel's stream ID. Base64 UTF-8
 
 Guide channel rows also show the current programme title below channel/version metadata. Visible rows fetch schedules after 650 ms, with at most two background requests in addition to the selected channel; the whole playlist is never fetched at once. Titles use the programme intervals, rechecked every 30 seconds, and schedules are revalidated every 15 minutes. **Actualiser** refreshes the selected schedule and composed row summaries. Rows distinguish **Chargement…**, **Programme non fourni** (no current interval), and **Guide indisponible**. The channel column is 240 dp; titles truncate to one line to preserve density. Provider coverage remains a limitation.
 
-Category channel lists use the same current-programme summaries below country/quality badges, keeping every channel available for live playback. The guide defaults to **Avec programme**: after checking a row, channels without a current programme interval or with a guide error are hidden. Pending rows stay visible while loading; the visible list is checked progressively with bounded requests. **Toutes** restores the complete playlist. If the selected channel is removed, the next surviving channel takes over; if none remain, **Toutes les chaînes** and **Réessayer** provide recovery. Manual refresh and the 15-minute schedule check clear availability results for another check. This filter concerns programme data, not stream playback availability.
+Category channel lists use the same current-programme summaries below country/quality badges, keeping every channel available for live playback. The guide defaults to **Toutes** and retains the requested channel even without a schedule. Its header names the originating scope and channel count. **Programme en cours** excludes non-active channels known to have no current interval or a guide error, but preserves pending rows and the active channel. Filter availability freezes while navigating the channel pane and updates after leaving it, avoiding asynchronous row removal under focus. Manual refresh and the 15-minute schedule check revalidate availability. This filter concerns programme data, not stream playback availability.
 
-Verified on the emulator with the Portuguese sports category at normal and 130% text: rows show supplied programme titles or the missing-programme fallback; SPORT TV2 remains in browsing, is excluded by Avec programme, and returns with Toutes. D-pad navigation and manual refresh remain usable with filtering enabled. The debug build and five guide tests pass. The all-channels-filtered recovery state has not been exercised against the provider.
+The earlier Portuguese sports check verified supplied programme titles, missing-programme fallback and manual refresh at normal and 130% text. The 2026-10-13 usability change additionally verifies MY TF1 remains selected with its empty schedule under both Toutes and Programme en cours; direct playback remains available.
 
 Verified on the Google TV emulator at normal and 130% text size: live titles for TF1, M6 and France 2, missing schedule fallback, D-pad access to future programmes and scrollable details, and manual refresh. Selecting a future programme keeps the live title in the channel row. Debug build and all five guide unit tests pass. Physical-TV readability and programme rollover have not been observed in this check.
 
@@ -161,7 +167,7 @@ Category changes keep Continue Watching visible across movie and series categori
 
 **Films** and **Séries** are separate navigation drawer destinations. They load categories and titles only when opened, using the saved account and the provider's `get_vod_categories` / `get_vod_streams` and `get_series_categories` / `get_series` actions. Category filters and accent-insensitive title search run locally. Selecting a series fetches `get_series_info`; episodes are ordered by numeric season and episode, with a season filter. Movies use `/movie/…` and episodes `/series/…`, preserving the provider container extension. Full-screen Media3 controls support remote pause and seeking. Back restores the catalog, filter, selected row and scroll position, including episode lists.
 
-The VOD interface uses six poster columns (five at enlarged text), a fixed cinematic title banner, scoped search and a searchable category overlay. Movie details fetch provider synopsis/backdrop/year/rating via get_vod_info and offer Reprendre or Recommencer. Series show season chips and three episode columns (two at enlarged text), with individual progress and a next-episode action. Watch progress is stored locally under a SHA-256 account key, capped at 100 metadata records. It saves every five seconds, on pause/seek/background and exit; actual end or 95% watched marks completion. Continue Watching shows unfinished movies and each series' most recently watched episode if unfinished, survives app restarts, and supports long OK to remove an entry. No cross-device sync is provided.
+The VOD interface uses six poster columns (five at enlarged text), scoped search, a searchable category overlay and Trier. Provider order, title A–Z and descending known year are available; unknown years stay last. Each library retains its own sort while open; changing it preserves category/query and resets position. Explicit year/quality suffixes become separate metadata while original titles remain searchable; numeric or ambiguous titles are preserved. Down from header enters the first content card. Native grid scrolling reveals the whole focused poster with clearance for its outline. Movie details fetch provider synopsis/backdrop/year/rating via get_vod_info and offer Reprendre or Recommencer. Series show season chips and three episode columns (two at enlarged text), with individual progress and a next-episode action. Watch progress is stored locally under a SHA-256 account key, capped at 100 metadata records. It saves every five seconds, on pause/seek/background and exit; actual end or 95% watched marks completion. Continue Watching shows unfinished movies and each series' most recently watched episode if unfinished, survives app restarts, and supports long OK to remove an entry. No cross-device sync is provided.
 
 Catalogs remain in account-isolated memory and reload after an app restart. They have no live preview, EPG requests, live-channel favorites or live recents. Pending requests disconnect on leaving the screen. Empty catalogs and provider errors have French explanations; failures offer retry. No external metadata service is used.
 
@@ -234,6 +240,8 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 - **Category navigation verification (2026-10-13):** reproduced hidden movie Continue Watching before the fix. After reinstall, unfinished movies and the Luck S1 E1 entry remain visible in provider categories on the Google TV emulator. Back restores movie selection and position. All 19 unit tests pass, including a category change from grid item 120, independent movie/series sessions and unchanged-category restoration.
 
 - **Responsiveness verification (2026-10-13):** live sorting/search and movie/series filtering now run off the UI thread. Search scans check cancellation between items, movie/series title keys warm in the background, and category ranks are reused. Debug build and 14 unit tests pass, including worker execution, snapshot consistency and cancellation. Emulator checks cover initial live focus, TF1 best-match selection, typing focus, missing results and muted preview. The 53,537-title movie catalog returns 25 Matrix matches while keeping focus in search; Back dismisses the keyboard. Zero-jank performance on a physical TV remains unverified; emulator cache-read timings still vary widely.
+
+- **Reviewed usability verification (2026-10-13):** Home shows two-line names/programmes, equal-height cards and a fixed contextual footer; first/middle/last/sole favorite removal restores neighbor or France focus and consumes the held OK release. Pinned cards grow for wrapped names and sole removal focuses Épingler. Movies and series offer independent provider/title/year sorting, conservative year/quality metadata and deterministic header Down entry with full focused-card visibility. Guide entry retains MY TF1 without schedule, defaults to Toutes, states the originating scope and freezes filtered membership during channel navigation. Chercher partout preserves the query and clears country/quality restrictions. Blank setup was exercised in an isolated emulator user at 130% text with inline validation and keyboard/Back. Normal/130% native screenshots, 34 passing tests, debug build and lint are recorded in `.omo/evidence/review-usability/QA.md`. Existing lint warnings remain; physical-TV viewing distance and performance remain unverified.
 
 - **Distribution (2026-10-12):** the app is named Easy IPTV in its launcher label, banner and settings. The existing application ID is retained. Local unit tests and debug APK build pass; GitHub Actions builds and uploads a debug-signed Google TV APK (see README). Production signing is not configured.
 
