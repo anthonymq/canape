@@ -36,6 +36,10 @@ The interface must work with D-pad focus and OK/Back actions. It should make the
 
 ### First run and account setup
 
+**Configurer avec mon téléphone** is available during setup and in Réglages. It opens a temporary QR code for a browser form on the same local Wi-Fi. The form can submit a new account, choose French/Portuguese/automatic audio, refresh channels, reset unavailable channels, and clear recents with explicit confirmation. The TV validates and encrypts account credentials through the existing connection flow; the browser never receives saved credentials. Check account validation results on the TV. The random session link expires after 10 minutes and closes with Back, navigation away or backgrounding. Local HTTP is unencrypted and requires trusted Wi-Fi; guest-network isolation can prevent access. Physical-phone access remains to be verified on a real TV network.
+
+Verified on 2026-10-13: debug build, unit tests and lint pass; Settings QR dialog inspected with D-pad at normal and 130% font scale. The QR decodes, serves the browser form through emulator port forwarding, accepts audio settings, and closes its server on Back. The browser form was inspected at 390 px width. Fresh account setup with real credentials and a physical phone/TV LAN were not tested.
+
 1. The viewer enters the Xtream server address, username, and password. Focusing a field never opens the keyboard; OK starts editing, and the keyboard's Next action moves to the next field. An address without a scheme gets `http://`.
 2. The app validates the account by loading the catalog, and only then saves it encrypted with AES/GCM using a key held by Android Keystore.
 3. Home opens. The catalog is cached on device (`CatalogCache.kt`, metadata only), so later launches open Home from the cache and refresh silently in the background.

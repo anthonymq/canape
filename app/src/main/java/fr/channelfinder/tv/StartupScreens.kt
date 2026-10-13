@@ -162,6 +162,8 @@ fun LoadErrorScreen(message: String, onRetry: () -> Unit, onEditAccount: () -> U
 
 @Composable
 fun SetupScreen(state: AppState, page: Page.Setup) {
+    var remoteSettings by remember { mutableStateOf(false) }
+    if (remoteSettings) RemoteSettingsDialog(state) { remoteSettings = false }
     val existing = state.account
     var server by remember { mutableStateOf(existing?.serverUrl.orEmpty()) }
     var username by remember { mutableStateOf(existing?.username.orEmpty()) }
@@ -222,9 +224,7 @@ fun SetupScreen(state: AppState, page: Page.Setup) {
                 style = Type.Body, color = Palette.Muted
             )
             Spacer(Modifier.height(28.dp))
-            Feature(Icons.Rounded.SportsSoccer, "France, Português et Sports en accès direct")
-            Feature(Icons.Rounded.Search, "Recherche instantanée dans toutes vos chaînes")
-            Feature(Icons.Rounded.Star, "Favoris et dernières chaînes à portée de main")
+            TvButton("Configurer avec mon téléphone", { remoteSettings = true }, icon = Icons.Rounded.ManageAccounts)
         }
         Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -306,6 +306,8 @@ fun Callout(icon: ImageVector, tone: Color, surface: Color, text: String) {
 
 @Composable
 fun SettingsScreen(state: AppState) {
+    var remoteSettings by remember { mutableStateOf(false) }
+    if (remoteSettings) RemoteSettingsDialog(state) { remoteSettings = false }
     val context = LocalContext.current
     val firstFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focusWhenReady(firstFocus) }
@@ -330,6 +332,11 @@ fun SettingsScreen(state: AppState) {
                 modifier = Modifier.focusRequester(firstFocus),
                 trailing = { if (state.refreshing) Spinner(Modifier.size(24.dp), color = LocalContentColor.current, stroke = 3.dp) }
             ) { state.refresh(silent = false) }
+            SettingsRow(
+                icon = Icons.Rounded.ManageAccounts,
+                title = "Configurer avec mon téléphone",
+                subtitle = "Afficher un QR code · téléphone sur le même Wi-Fi"
+            ) { remoteSettings = true }
             SettingsRow(
                 icon = Icons.Rounded.ManageAccounts,
                 title = "Modifier le compte",
