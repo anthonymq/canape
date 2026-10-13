@@ -1,10 +1,10 @@
-# Easy IPTV Product Requirements
+# Canapé Product Requirements
 
 _Last updated: 2026-10-13 (reviewed usability)_
 
 ## Product summary
 
-Easy IPTV is a Google TV / Android TV app for finding live channels in a large user-supplied Xtream Codes playlist. It is designed for a viewer who finds typical IPTV apps difficult to navigate. The playlist currently contains 24,057 live channels, so the product prioritizes direct destinations, local search, simple favorites, and a live preview while browsing.
+Canapé is a Google TV / Android TV app for finding live channels in a large user-supplied Xtream Codes playlist. It is designed for a viewer who finds typical IPTV apps difficult to navigate. The playlist currently contains 24,057 live channels, so the product prioritizes direct destinations, local search, simple favorites, and a live preview while browsing.
 
 The project is a working prototype. It builds a debug APK, runs on a Google TV emulator (Android 14), loads the full playlist, and plays live streams in both the muted preview and full screen. It has not yet been tested on a physical Google TV device (see [Known issues](#known-issues)). The UI follows the Android TV design guidelines (developer.android.com/design/ui/tv): 58 dp side / 28 dp top-bottom safe margins, standard card widths, a single focus treatment, no on-screen back buttons, and Back-to-top on Home.
 
@@ -243,7 +243,7 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 
 - **Reviewed usability verification (2026-10-13):** Home shows two-line names/programmes, equal-height cards and a fixed contextual footer; first/middle/last/sole favorite removal restores neighbor or France focus and consumes the held OK release. Pinned cards grow for wrapped names and sole removal focuses Épingler. Movies and series offer independent provider/title/year sorting, conservative year/quality metadata and deterministic header Down entry with full focused-card visibility. Guide entry retains MY TF1 without schedule, defaults to Toutes, states the originating scope and freezes filtered membership during channel navigation. Chercher partout preserves the query and clears country/quality restrictions. Blank setup was exercised in an isolated emulator user at 130% text with inline validation and keyboard/Back. Normal/130% native screenshots, 34 passing tests, debug build and lint are recorded in `.omo/evidence/review-usability/QA.md`. Existing lint warnings remain; physical-TV viewing distance and performance remain unverified.
 
-- **Distribution (2026-10-12):** the app is named Easy IPTV in its launcher label, banner and settings. The existing application ID is retained. Local unit tests and debug APK build pass; GitHub Actions builds and uploads a debug-signed Google TV APK (see README). Production signing is not configured.
+- **Distribution (2026-10-13):** renamed to Canapé in the launcher label, banner, setup and settings. The existing application ID is retained. Local verification: 34 unit tests, debug/release builds and lint pass (existing warnings remain); the signed release installs on a clean Android 14 Google TV emulator, and setup/launcher screenshots show Canapé with its accent. Settings substitutions are source-reviewed. Signed APKs are distributed through `anthonymq/canape` GitHub Releases using a persistent signing key. The first release is signed locally; automated tag releases require signing secrets and `CANAPE_CI_RELEASES=true`. Downloader can use the stable latest-release APK URL (see README). Earlier debug installations require uninstalling before the first signed release.
 
 - **Lane classification:** the category's country code now decides the lane when present; name keywords are only used for untagged categories. Sports keeps only FR/PT/BR-tagged groups (391 channels); other countries' sports (including `BE ‖ BELGIQUE • SPORTS`) stay reachable from their category and search.
 - **Provider-side dead channels:** many France/Português channels answer HTTP 407 (see [Unavailable channels](#unavailable-channels)). The app learns them as the viewer meets them; there is no background scan, to avoid extra provider connections on a one-connection account.

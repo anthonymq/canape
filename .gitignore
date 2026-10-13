@@ -15,6 +15,9 @@ captures/
 # Never commit credentials
 *.env
 secrets.*
+signing/
+*.keystore
+*.jks
 
 # Local agent state and manual QA captures
 .omo/

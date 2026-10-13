@@ -215,7 +215,7 @@ fun SetupScreen(state: AppState, page: Page.Setup) {
             verticalArrangement = Arrangement.Center) {
             AppMark()
             Spacer(Modifier.height(24.dp))
-            Text("EASY IPTV", style = Type.Eyebrow, color = Palette.Accent)
+            Text("CANAPÉ", style = Type.Eyebrow, color = Palette.Accent)
             Spacer(Modifier.height(8.dp))
             Text(if (existing == null) "Connectez votre service TV" else "Modifier le compte", style = Type.Display, color = Palette.OnSurface)
             Spacer(Modifier.height(12.dp))
@@ -319,7 +319,7 @@ fun SettingsScreen(state: AppState) {
     val updated = describeUpdate(state.lastUpdated)
 
     Column(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
-        ScreenHeader("Easy IPTV", "Réglages", trailing = { Clock() })
+        ScreenHeader("Canapé", "Réglages", trailing = { Clock() })
         Spacer(Modifier.height(28.dp))
         Column(
             Modifier.widthIn(max = 720.dp).weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
@@ -380,7 +380,7 @@ fun SettingsScreen(state: AppState) {
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            "Easy IPTV $version · ${number.format(state.channels.size)} chaînes · ${number.format(state.categories.size)} catégories",
+            "Canapé $version · ${number.format(state.channels.size)} chaînes · ${number.format(state.categories.size)} catégories",
             style = Type.Caption, color = Palette.Faint
         )
         Spacer(Modifier.height(12.dp))

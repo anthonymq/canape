@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "EasyIPTV"
+rootProject.name = "Canape"
 include(":app")

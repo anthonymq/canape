@@ -11,11 +11,28 @@ android {
         applicationId = "fr.channelfinder.tv"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     buildFeatures { compose = true }
+
+    val releaseKeystore = System.getenv("CANAPE_KEYSTORE_PATH")
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("distribution") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("CANAPE_KEYSTORE_PASSWORD")
+                keyAlias = "canape"
+                keyPassword = System.getenv("CANAPE_KEYSTORE_PASSWORD")
+            }
+        }
+        buildTypes {
+            getByName("release") {
+                signingConfig = signingConfigs.getByName("distribution")
+            }
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

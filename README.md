@@ -1,4 +1,4 @@
-# Easy IPTV
+# Canapé
 
 A native Android TV / Google TV starter app built around quick channel discovery rather than a full-screen EPG.
 
@@ -46,17 +46,31 @@ See `AGENTS.md` for the toolchain (JDK 17, AGP 9.4.1, compileSdk 37), build, and
 
 ## Download a Google TV APK
 
-The [Google TV APK workflow](https://github.com/anthonymq/easy-iptv/actions/workflows/google-tv-apk.yml) runs on pushes and pull requests to `main`, version tags (`v*`), and **Run workflow**. It runs unit tests and builds the app using JDK 17 and Android SDK 37.
+The [Google TV APK workflow](https://github.com/anthonymq/canape/actions/workflows/google-tv-apk.yml) runs on pushes and pull requests to `main`, version tags (`v*`), and **Run workflow**. It runs unit tests and builds the app using JDK 17 and Android SDK 37.
 
-Pushing a version tag automatically publishes a GitHub prerelease with the tested APK attached. For example, after updating the app version and committing it, run `git tag v0.1.1` and `git push origin v0.1.1`. Release downloads are available on the [Releases page](https://github.com/anthonymq/easy-iptv/releases) without extracting a CI artifact ZIP. Rerunning a tag build replaces that release's APK. Main-branch and pull-request builds produce CI artifacts only. Only the tag release job receives write permissions; no additional token or signing secret is required.
+Signed APKs are published on the [Releases page](https://github.com/anthonymq/canape/releases). The first release is built and signed locally. Once CI signing is configured (below), pushing a version tag publishes the signed APK automatically. Update `versionCode` and `versionName` in `app/build.gradle.kts` before tagging, then run `git tag v0.1.1` and `git push origin v0.1.1` (choose the new version for later releases). Rerunning a tag build replaces that release's APK. Main-branch and pull-request builds produce debug CI artifacts only. Only the tag release job receives write permissions.
 
-Open a successful run and download the **easy-iptv-google-tv** artifact. Unzip it to get `easy-iptv-google-tv.apk`, then sideload it on an Android TV or Google TV device (Android 6.0 or newer):
+### Install through Downloader
+
+1. Install **Downloader by AFTVnews** from Google Play on your Google TV.
+2. Enter `https://github.com/anthonymq/canape/releases/latest/download/canape-google-tv.apk` in Downloader.
+3. Allow Downloader to install unknown apps when prompted, then choose **Install**.
+
+For a shorter remote-control entry, submit that stable URL to [AFTVnews's URL shortener](https://go.aftvnews.com/) and share its numeric code. The same URL follows the latest published release. No GitHub login or artifact ZIP extraction is required.
+
+Alternatively, download `canape-google-tv.apk` from a release and install using ADB (Android 6.0 or newer):
 
 ```bash
-adb install -r easy-iptv-google-tv.apk
+adb install -r canape-google-tv.apk
 ```
 
-This is a debug-signed APK for testing, not a Play Store release. CI artifacts expire after 30 days. GitHub runners generate their own debug signing key, so replacing an APK from a different build may require uninstalling the old app first, which removes its saved account and preferences. The application ID remains `fr.channelfinder.tv` to preserve existing local installations.
+Release APKs use a persistent signing key. Future releases with a higher version code can update Canapé while keeping saved accounts and preferences. Existing Easy IPTV debug installations must be uninstalled before the first Canapé release, which removes their local data. The application ID remains `fr.channelfinder.tv`. Debug CI artifacts expire after 30 days and are not the distribution download.
+
+### Release signing
+
+Automated releases require two GitHub Actions secrets: `CANAPE_KEYSTORE_BASE64` (base64-encoded keystore) and `CANAPE_KEYSTORE_PASSWORD`, plus the Actions variable `CANAPE_CI_RELEASES=true`. Without that variable, CI tests and builds debug APKs but skips release publishing. The key alias is `canape`. The initial key and password are backed up locally in the ignored `signing/` directory; keep a secure backup of both, because replacing the key prevents updates to installed copies. Never commit these files. The enabled release job fails if either secret is missing.
+
+For a local signed build, set `CANAPE_KEYSTORE_PATH` to the absolute keystore path and `CANAPE_KEYSTORE_PASSWORD` to its password, then run `./gradlew assembleRelease`. Without these variables, `assembleRelease` produces an unsigned APK.
 
 ## Current scope
 

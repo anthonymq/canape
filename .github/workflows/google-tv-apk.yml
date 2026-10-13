@@ -38,28 +38,52 @@ jobs:
       - name: Test and build Google TV APK
         run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
       - name: Name APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/easy-iptv-google-tv.apk
+        run: cp app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/canape-google-tv-debug.apk
       - name: Upload APK
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: easy-iptv-google-tv
-          path: app/build/outputs/apk/debug/easy-iptv-google-tv.apk
+          name: canape-google-tv-debug
+          path: app/build/outputs/apk/debug/canape-google-tv-debug.apk
           if-no-files-found: error
           retention-days: 30
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request'
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name != 'pull_request' && vars.CANAPE_CI_RELEASES == 'true'
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      - name: Download tested APK
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up JDK 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
-          name: easy-iptv-google-tv
-          path: apk
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android SDK packages
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;37.0.0'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6
+      - name: Build signed release APK
+        env:
+          CANAPE_KEYSTORE_BASE64: ${{ secrets.CANAPE_KEYSTORE_BASE64 }}
+          CANAPE_KEYSTORE_PASSWORD: ${{ secrets.CANAPE_KEYSTORE_PASSWORD }}
+          CANAPE_KEYSTORE_PATH: ${{ runner.temp }}/canape.keystore
+        run: |
+          test -n "$CANAPE_KEYSTORE_BASE64"
+          test -n "$CANAPE_KEYSTORE_PASSWORD"
+          trap 'rm -f "$CANAPE_KEYSTORE_PATH"' EXIT
+          printf '%s' "$CANAPE_KEYSTORE_BASE64" | base64 --decode > "$CANAPE_KEYSTORE_PATH"
+          chmod 600 "$CANAPE_KEYSTORE_PATH"
+          ./gradlew --no-daemon assembleRelease
+          mkdir -p apk
+          cp app/build/outputs/apk/release/app-release.apk apk/canape-google-tv.apk
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -67,9 +91,9 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" apk/easy-iptv-google-tv.apk --clobber
+            gh release upload "$RELEASE_TAG" apk/canape-google-tv.apk --clobber
           else
-            gh release create "$RELEASE_TAG" apk/easy-iptv-google-tv.apk \
-              --verify-tag --title "Easy IPTV $RELEASE_TAG" --prerelease \
-              --notes "Google TV / Android TV testing build. Download the APK below and sideload it on your TV. This APK is debug-signed; Android 6.0 or newer is required."
+            gh release create "$RELEASE_TAG" apk/canape-google-tv.apk \
+              --verify-tag --title "Canapé $RELEASE_TAG" --latest \
+              --notes "Canapé for Google TV / Android TV (Android 6.0 or newer). Open Downloader and enter https://github.com/anthonymq/canape/releases/latest/download/canape-google-tv.apk to install. Signed with the persistent Canapé distribution key. Previous debug builds must be uninstalled first."
           fi

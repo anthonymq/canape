@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for coding agents working on Easy IPTV, a Kotlin / Jetpack Compose for TV Xtream IPTV player for Google TV. Read `PRD.md` first: it holds the product requirements, current status, and known issues.
+Guidance for coding agents working on Canapé, a Kotlin / Jetpack Compose for TV Xtream IPTV player for Google TV. Read `PRD.md` first: it holds the product requirements, current status, and known issues.
 
 ## Hard rules
 
