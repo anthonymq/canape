@@ -69,6 +69,10 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
         } catch (failure: CatalogException) { error = failure.message }
     }
     val catalog = session.catalog
+    val headerFocus = remember { FocusRequester() }
+    LaunchedEffect(catalog) {
+        if (catalog == null) focusWhenReady(headerFocus)
+    }
     LaunchedEffect(catalog) {
         if (catalog != null) withContext(Dispatchers.Default) {
             val context = currentCoroutineContext()
@@ -80,20 +84,20 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(page.kind.title, style = Type.Headline, modifier = Modifier.weight(1f), color = Palette.OnSurface)
             TvTextField(session.query, { session.query = it }, "Rechercher un titre", editing, { editing = it },
-                icon = Icons.Rounded.Search, modifier = Modifier.width(320.dp))
+                icon = Icons.Rounded.Search, modifier = Modifier.width(320.dp).focusRequester(headerFocus))
             TvButton("Catégories", { categoryOpen = true }, icon = Icons.Rounded.GridView, compact = true, enabled = catalog != null)
         }
         if (catalog == null) {
             if (error != null) LibraryStatus(error.orEmpty(), true) { retry++ } else LibrarySkeleton()
         } else {
-            LibraryGrid(state, session, page.kind, editing)
+            LibraryGrid(state, session, page.kind, editing, headerFocus)
             if (categoryOpen) LibraryCategoryDialog(catalog, session, onClose = { categoryOpen = false })
         }
     }
 }
 
 @Composable
-private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryKind, editing: Boolean) {
+private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryKind, editing: Boolean, headerFocus: FocusRequester) {
     val catalog = session.catalog ?: return
     val account = state.account ?: return
     val history = state.watchHistory.entries(account)
@@ -132,13 +136,12 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
             val index = rows.indexOf(target) + offset
             if (session.grid.layoutInfo.visibleItemsInfo.none { it.index == index }) session.grid.scrollToItem(index)
             focusWhenReady(focus)
+        } else {
+            focusWhenReady(headerFocus)
         }
         restoredInputs = focusInputs
     }
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
-        VodHero(session.highlighted ?: target, if (kind == LibraryKind.MOVIES) "À découvrir · Films" else "À découvrir · Séries",
-            Modifier.height(if (LocalDensity.current.fontScale > 1.15f) 144.dp else Cinema.HeroHeight), titleLines = 1)
-    LazyVerticalGrid(GridCells.Fixed(columns), Modifier.weight(1f), state = session.grid,
+    LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize(), state = session.grid,
         horizontalArrangement = Arrangement.spacedBy(Cinema.GridGap), verticalArrangement = Arrangement.spacedBy(Cinema.GridGap),
         contentPadding = PaddingValues(8.dp)) {
         if (showResume) item(span = { GridItemSpan(maxLineSpan) }, key = "resume") { VodContinueRow(state, session, resume, if (restoreResume) focus else null) }
@@ -162,7 +165,6 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
                 state.navigate(if (kind == LibraryKind.MOVIES) Page.MovieDetails(item) else Page.Episodes(item))
             }
         }
-    }
     }
 }
 

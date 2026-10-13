@@ -134,7 +134,6 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
                         destinationSelected = true
                     } else {
                         state.openDestination(dest)
-                        destinationSelected = true
                     }
                 }
                 DrawerItem(topEntry, active, requesters, ::select)

@@ -223,6 +223,10 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 
 ## Known issues
 
+- **Menu transition flicker (2026-10-13):** drawer destinations replace the page without overlapping fades. New destinations restore their own focus; reselecting the current menu item still hands focus back to content. Movie/series loading and empty states have a search-field fallback. Before/after Google TV recordings verify France/Português transitions; Movies, Series and current-destination reselection retain visible content focus. Debug build and all 22 unit tests pass. Physical-TV transitions remain unverified.
+
+- **Dense movie/series browsing (2026-10-13):** removed the discovery banner so the poster grid uses the full region below the search/category header. Poster focus keeps scale 1.0 and the white outline; removed its delayed extra scroll request. Debug build and unit tests pass. Google TV emulator screenshots verify both libraries, horizontal focus without card movement, and next-row scrolling. Physical-TV behavior remains unverified.
+
 - **Removal confirmation and button focus (2026-10-13):** long OK on Continue Watching and the movie-details removal action now open the same confirmation dialog. Annuler starts focused; Cancel/Back preserve progress, while Retirer removes the entry and returns to browsing. The dialog shares the original-press release guard. Button glow/shadow is disabled while the light focus fill and scale remain. Verified on the 1080p Google TV emulator, with 22 passing unit tests and independent visual review.
 
 - **Remote controls verification (2026-10-13):** drawer selection explicitly hands focus into content; series episode loading retains focus outside the drawer. Continue Watching removal consumes the remainder of the current OK/Enter press at the app root, preventing its release from activating the replacement card. Emulator checks cover Séries selection, opening a series, removing the last movie resume entry and the next ordinary OK. All 22 unit tests pass; the release-event regression failed before the guard was implemented. Physical remote testing remains unverified.

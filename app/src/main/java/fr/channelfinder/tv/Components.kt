@@ -237,6 +237,7 @@ fun CardSurface(
     shape: Shape = RoundedCornerShape(16.dp),
     container: Color = Palette.Surface1,
     interactionSource: MutableInteractionSource? = null,
+    focusedScale: Float = 1.05f,
     body: @Composable BoxScope.() -> Unit
 ) {
     if (onLongClick == null) {
@@ -245,7 +246,7 @@ fun CardSurface(
             container = container, focusedContainer = container,
             content = Palette.OnSurface, focusedContent = Palette.OnSurface,
             border = BorderStroke(1.dp, Palette.Outline), focusedBorder = BorderStroke(3.dp, Palette.FocusFill),
-            focusedScale = 1.05f, interactionSource = interactionSource, body = body
+            focusedScale = focusedScale, interactionSource = interactionSource, body = body
         )
         return
     }
@@ -266,7 +267,7 @@ fun CardSurface(
             border = Border(BorderStroke(1.dp, Palette.Outline), shape = shape),
             focusedBorder = Border(BorderStroke(3.dp, Palette.FocusFill), inset = 3.dp, shape = shape)
         ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1.05f, pressedScale = 1.02f),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = focusedScale, pressedScale = minOf(1.02f, focusedScale)),
         glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Palette.Accent.copy(alpha = 0.3f), 18.dp)),
         interactionSource = interactionSource,
         content = body

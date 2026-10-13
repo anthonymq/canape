@@ -4,13 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.unit.IntSize
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,19 +56,8 @@ fun VodProgress(watch: VodWatch, modifier: Modifier = Modifier) {
 fun VodPoster(item: LibraryItem, watch: VodWatch?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val largeText = LocalDensity.current.fontScale > 1.15f
     var artworkLoaded by remember(item.artwork) { mutableStateOf(false) }
-    val reveal = remember { BringIntoViewRequester() }
-    var focused by remember { mutableStateOf(false) }
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    val clearance = with(LocalDensity.current) { 8.dp.toPx() }
-    LaunchedEffect(focused) {
-        if (focused) {
-            delay(100)
-            reveal.bringIntoView(Rect(0f, -clearance, size.width.toFloat(), size.height + clearance))
-        }
-    }
-    CardSurface(onClick, modifier.fillMaxWidth().bringIntoViewRequester(reveal)
-        .onSizeChanged { size = it }.onFocusChanged { focused = it.hasFocus },
-        shape = RoundedCornerShape(Cinema.CardRadius), container = Cinema.Panel) {
+    CardSurface(onClick, modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Cinema.CardRadius), container = Cinema.Panel, focusedScale = 1f) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.fillMaxWidth().aspectRatio(if (largeText) Cinema.LargePosterRatio else Cinema.PosterRatio), contentAlignment = Alignment.Center) {
                 if (!artworkLoaded) Text(item.title, style = Type.Label, maxLines = 4, overflow = TextOverflow.Ellipsis,

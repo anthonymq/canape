@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -90,7 +92,13 @@ private fun ChannelFinderApp(probe: String? = null) {
                         else -> it::class
                     }
                 },
-                transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(120)) },
+                transitionSpec = {
+                    if (state.isDrawerRoot || targetState == Page.Home) {
+                        EnterTransition.None togetherWith ExitTransition.None
+                    } else {
+                        fadeIn(tween(160)) togetherWith fadeOut(tween(120))
+                    }
+                },
                 label = "page"
             ) { page ->
                 when (page) {
