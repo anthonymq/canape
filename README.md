@@ -9,6 +9,12 @@ A native Android TV / Google TV starter app built around quick channel discovery
 3. Home provides direct destinations for **France**, **Português**, **Sports**, **Favorites**, **Recent**, and the category picker.
 4. Search filters the local channel catalog immediately. The channel browser uses a two-pane layout: focused channel rows on the left and a muted live preview on the right. The preview waits briefly after focus settles, so fast D-pad browsing does not repeatedly start streams. OK opens full-screen playback; Back restores the selected channel.
 
+## Movies and series
+
+Open **Films** or **Séries** in the navigation drawer for a poster grid and a cinematic title banner. Search titles locally or open the searchable **Catégories** picker. Movie details show the provider's synopsis, **Regarder / Reprendre**, and **Recommencer**. Series offer season filters, episode cards and individual progress.
+
+**Continuer à regarder** saves unfinished movies and the most recent episode of each series across app restarts, separately for each account. OK resumes at the saved position; long OK removes the entry. Episode cards support long OK to start over. Playback saves progress every five seconds and on pause, seeking, backgrounding and exit. Finished items (actual end or 95% watched) leave Continue Watching; series offer the next episode on the episode page or after playback ends. History holds at most 100 items on this TV; it does not sync to other devices. Catalogs stay in memory and reload after an app restart. No titles enter live-channel favorites, recents or the TV guide. Artwork, metadata, formats and seeking support depend on the provider.
+
 ## Category favorites
 
 Open **Catégories** from Home, search or browse the provider's category list, then select the star on a category row. Pinned categories appear on Home with their channel counts and open directly to that category. Category favorites are stored locally by Xtream category ID, so labels do not need to be parsed from channel names.

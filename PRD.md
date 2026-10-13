@@ -1,6 +1,6 @@
 # Easy IPTV Product Requirements
 
-_Last updated: 2026-10-12 (compact browsing layout)_
+_Last updated: 2026-10-12 (movies and series)_
 
 ## Product summary
 
@@ -155,6 +155,16 @@ In full screen, **▶** opens **Audio et sous-titres** when the stream has more 
 - Trailing language tags in group names are tidied: "CANADA |FR" → "CANADA (FR)".
 - Réglages: **Langue audio préférée** (Français → Português → Automatique) and **Réessayer les chaînes indisponibles** (clears all 12-hour marks). The list scrolls if it outgrows the screen.
 
+### Movies and series
+
+**Films** and **Séries** are separate navigation drawer destinations. They load categories and titles only when opened, using the saved account and the provider's `get_vod_categories` / `get_vod_streams` and `get_series_categories` / `get_series` actions. Category filters and accent-insensitive title search run locally. Selecting a series fetches `get_series_info`; episodes are ordered by numeric season and episode, with a season filter. Movies use `/movie/…` and episodes `/series/…`, preserving the provider container extension. Full-screen Media3 controls support remote pause and seeking. Back restores the catalog, filter, selected row and scroll position, including episode lists.
+
+The VOD interface uses six poster columns (five at enlarged text), a fixed cinematic title banner, scoped search and a searchable category overlay. Movie details fetch provider synopsis/backdrop/year/rating via get_vod_info and offer Reprendre or Recommencer. Series show season chips and three episode columns (two at enlarged text), with individual progress and a next-episode action. Watch progress is stored locally under a SHA-256 account key, capped at 100 metadata records. It saves every five seconds, on pause/seek/background and exit; actual end or 95% watched marks completion. Continue Watching shows unfinished movies and each series' most recently watched episode if unfinished, survives app restarts, and supports long OK to remove an entry. No cross-device sync is provided.
+
+Catalogs remain in account-isolated memory and reload after an app restart. They have no live preview, EPG requests, live-channel favorites or live recents. Pending requests disconnect on leaving the screen. Empty catalogs and provider errors have French explanations; failures offer retry. No external metadata service is used.
+
+Verified on the 1080p Google TV emulator at normal and 130% text: six/five-column poster grids, three/two-column episodes, complete focus outlines, cinematic movie details, category search/filtering and empty-result recovery. Movie resume persisted through reinstall/restart; Recommencer reset playback, and series episode progress appeared in Continue Watching and the episode grid. One Back closes the keyboard. The debug build and all 11 unit tests pass, including persistence, completion and catalog/episode parser tests. A provider 405 playback refusal displayed a safe French error and retry. Physical-TV readability, catalog failure/retry and an actual end-to-next-episode transition remain unobserved.
+
 ## Functional requirements
 
 | ID | Requirement | Current status |
@@ -168,6 +178,8 @@ In full screen, **▶** opens **Audio et sous-titres** when the stream has more 
 | FR-7 | Preview the selected live channel while browsing, muted by default and delayed until focus settles. | Verified on emulator: plays muted; failure state shown. |
 | FR-8 | Open a channel full-screen and restore the prior browsing context on Back. | Verified on emulator: plays with sound; zapping works; Back restores the last watched row. |
 | FR-9 | Display provider programme schedules with times, current/upcoming status and descriptions. | Implemented through Xtream get_simple_data_table; real TF1 schedule verified on emulator. Empty feeds remain playable. |
+| FR-10 | Browse provider movies separately with categories, search and on-demand playback. | Implemented; emulator catalog exposes 53,538 movies and movie playback verified. |
+| FR-11 | Browse provider series separately and select seasons and episodes. | Verified on emulator: 12,159 series, season/episode lists, episode playback and Back restoring the second episode. |
 
 ## Technical design
 
@@ -243,6 +255,12 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 | `StreamProbe.kt` | Debug-build stream diagnostics (logs channel names and status codes only). |
 | `CatalogCache.kt` | Binary on-device catalog cache (metadata only, account identified by hash). |
 | `XtreamRepository.kt` | Xtream category/channel requests, load steps, error translation, live stream URL creation. |
+| `VodRepository.kt` | On-demand catalogs, typed movie/series/episode metadata and stream URL creation. |
+| `LibraryScreen.kt`, `EpisodesScreen.kt` | Separate movie/series catalogs, category/title filters and season/episode selection. |
+| `VodPlayerScreen.kt` | Full-screen on-demand playback, automatic resume, progress checkpoints and next-episode action. |
+| `VodWatchStore.kt` | Account-isolated local watch progress, completion policy and Continue Watching selection. |
+| `VodArtwork.kt`, `VodContinueRow.kt`, `EpisodeCard.kt` | Cinematic title banner, poster cards, resume cards and episode progress. |
+| `MovieDetailsScreen.kt`, `LibraryCategoryDialog.kt` | Provider movie details and searchable category selection. |
 | `Channel.kt` | Account, category, channel, lane, and page models. |
 | `CredentialStore.kt` | Encrypted account persistence using Android Keystore. |
 | `app/src/main/AndroidManifest.xml` | TV app, launcher banner and icon. |

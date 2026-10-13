@@ -24,6 +24,8 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SportsSoccer
 import androidx.compose.material.icons.rounded.Stadium
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -69,7 +71,9 @@ private val mainEntries = listOf(
     DrawerEntry(NavDest.PORTUGUESE, "Português", emoji = "🇵🇹"),
     DrawerEntry(NavDest.SPORTS, "Sports", Icons.Rounded.SportsSoccer),
     DrawerEntry(NavDest.EVENTS, "Événements", Icons.Rounded.Stadium),
-    DrawerEntry(NavDest.FAVORITES, "Favoris", Icons.Rounded.Star)
+    DrawerEntry(NavDest.FAVORITES, "Favoris", Icons.Rounded.Star),
+    DrawerEntry(NavDest.MOVIES, "Films", Icons.Rounded.Movie),
+    DrawerEntry(NavDest.SERIES, "Séries", Icons.Rounded.VideoLibrary)
 )
 
 // Guideline: 1–3 actions at the bottom.

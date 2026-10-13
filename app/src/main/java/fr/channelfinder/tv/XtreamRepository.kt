@@ -83,7 +83,7 @@ class XtreamRepository {
         parseGuide(request(account, "get_simple_data_table", "&stream_id=${enc(channelId)}", guide = true, cancellation = cancellation))
     }
 
-    private fun request(account: XcAccount, action: String, extra: String = "", guide: Boolean = false,
+    internal fun request(account: XcAccount, action: String, extra: String = "", guide: Boolean = false,
                         cancellation: CancellationSignal? = null, onConnected: () -> Unit = {}): String {
         val query = "username=${enc(account.username)}&password=${enc(account.password)}&action=${enc(action)}$extra"
         val connection = URL("${account.serverUrl.trimEnd('/')}/player_api.php?$query").openConnection() as HttpURLConnection
@@ -123,7 +123,7 @@ class XtreamRepository {
         }
     }
 
-    private inline fun <T> translateErrors(block: () -> T): T = try {
+    internal inline fun <T> translateErrors(block: () -> T): T = try {
         block()
     } catch (error: CatalogException) {
         throw error

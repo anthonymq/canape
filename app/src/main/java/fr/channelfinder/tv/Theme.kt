@@ -45,6 +45,18 @@ object Spacing {
     val ChannelArtwork = 54.dp
 }
 
+object Cinema {
+    val Background = Color(0xFF101014)
+    val Panel = Color(0xFF1B1B22)
+    val Accent = Color(0xFFE5484D)
+    val CardRadius = 8.dp
+    val HeroHeight = 128.dp
+    val GridGap = 16.dp
+    val ResumeWidth = 200.dp
+    const val PosterRatio = 2f / 3f
+    const val LargePosterRatio = 0.95f
+}
+
 object Type {
     val Display = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold)
     val Headline = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold)

@@ -79,7 +79,16 @@ private fun ChannelFinderApp(probe: String? = null) {
             AnimatedContent(
                 targetState = state.page,
                 // Each lane/category is its own screen (fresh focus and scroll); query and filter edits are not.
-                contentKey = { if (it is Page.Browse) "browse:${it.lane}:${it.categoryId}" else it::class },
+                contentKey = {
+                    when (it) {
+                        is Page.Browse -> "browse:${it.lane}:${it.categoryId}"
+                        is Page.Library -> "library:${it.kind}"
+                        is Page.Episodes -> "episodes:${it.series.id}"
+                        is Page.MovieDetails -> "movie-details:${it.item.id}"
+                        is Page.VodPlayer -> "vod:${it.kind}:${it.item.id}"
+                        else -> it::class
+                    }
+                },
                 transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(120)) },
                 label = "page"
             ) { page ->
@@ -89,6 +98,10 @@ private fun ChannelFinderApp(probe: String? = null) {
                     is Page.Setup -> SetupScreen(state, page)
                     Page.Home -> HomeScreen(state)
                     Page.Settings -> SettingsScreen(state)
+                    is Page.Library -> LibraryScreen(state, page)
+                    is Page.Episodes -> EpisodesScreen(state, page)
+                    is Page.MovieDetails -> MovieDetailsScreen(state, page)
+                    is Page.VodPlayer -> VodPlayerScreen(state, page)
                     is Page.CategoryPicker -> CategoryPickerScreen(state, page)
                     is Page.Browse -> BrowserScreen(state, page)
                     is Page.Player -> PlayerScreen(state, page)
@@ -98,7 +111,7 @@ private fun ChannelFinderApp(probe: String? = null) {
         }
         // The navigation drawer frames the browsing screens; playback, setup and loading stay full screen.
         val withDrawer = when (state.page) {
-            Page.Home, Page.Settings, is Page.CategoryPicker, is Page.Browse -> true
+            Page.Home, Page.Settings, is Page.CategoryPicker, is Page.Browse, is Page.Library, is Page.Episodes, is Page.MovieDetails -> true
             else -> false
         }
         if (withDrawer) AppDrawer(state) { pages() } else pages()

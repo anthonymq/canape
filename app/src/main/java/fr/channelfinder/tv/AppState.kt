@@ -35,6 +35,10 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     private val prefs = context.getSharedPreferences("channel_usage", Context.MODE_PRIVATE)
     private val cache = CatalogCache(context)
     val repository = XtreamRepository()
+    val vodRepository = VodRepository(repository)
+    val watchHistory = VodWatchStore(context)
+    val librarySessions = mutableMapOf<LibraryKind, LibrarySession>()
+    val episodeSessions = mutableMapOf<String, LibrarySession>()
     val guideRepository = GuideRepository(repository)
 
     var account by mutableStateOf(credentialStore.load())
@@ -201,6 +205,8 @@ class AppState(context: Context, private val scope: CoroutineScope) {
             NavDest.SPORTS -> Page.Browse(BrowseLane.SPORTS)
             NavDest.EVENTS -> Page.Browse(BrowseLane.EVENTS)
             NavDest.FAVORITES -> Page.Browse(BrowseLane.FAVORITES)
+            NavDest.MOVIES -> Page.Library(LibraryKind.MOVIES)
+            NavDest.SERIES -> Page.Library(LibraryKind.SERIES)
             NavDest.GUIDE -> guideHome()
             NavDest.CATEGORIES -> Page.CategoryPicker()
             NavDest.SETTINGS -> Page.Settings
@@ -214,6 +220,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         get() = when (val root = backStack.getOrNull(1)) {
             null -> NavDest.HOME
             Page.Settings -> NavDest.SETTINGS
+            is Page.Library -> if (root.kind == LibraryKind.MOVIES) NavDest.MOVIES else NavDest.SERIES
             is Page.Guide -> NavDest.GUIDE
             is Page.CategoryPicker -> NavDest.CATEGORIES
             is Page.Browse -> when {
