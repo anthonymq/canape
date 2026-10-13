@@ -48,16 +48,17 @@ Built for the sofa, with a French interface, readable text, visible focus, and n
 **No computer needed.** On your Google TV or Android TV:
 
 1. Install **[Downloader by AFTVnews](https://play.google.com/store/apps/details?id=com.esaba.downloader)** from Google Play.
-2. Open Downloader and enter this address:
-
-   ```text
-   https://github.com/anthonymq/canape/releases/latest/download/canape-google-tv.apk
-   ```
-
+2. Open Downloader, enter code **`1089349`**, and select **Go**.
 3. Allow Downloader to install unknown apps when your TV asks, then choose **Install**.
 4. Open **Canapé**, enter your Xtream service details, and choose **Se connecter**.
 
-The download address always points to the latest published release. For a numeric code that's easier to type with a remote, submit that address to the [AFTVnews URL shortener](https://go.aftvnews.com/) and use the code it generates.
+**Short URL:** [aftv.news/1089349](https://aftv.news/1089349)
+
+The code and short URL point to the latest published APK. You can also use the direct download address:
+
+```text
+https://github.com/anthonymq/canape/releases/latest/download/canape-google-tv.apk
+```
 
 **Requirements:** Android 6.0 or newer, a TV remote, an internet connection, and your own Xtream service account. Available content and playback support depend on your service and device.
 
