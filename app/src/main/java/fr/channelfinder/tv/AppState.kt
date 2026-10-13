@@ -46,6 +46,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
 
     val backStack = mutableStateListOf<Page>(if (account == null) Page.Setup() else Page.Loading)
     val page: Page get() = backStack.last()
+    internal val confirmPressGuard = ConfirmPressGuard()
 
     var channels by mutableStateOf(emptyList<Channel>())
         private set

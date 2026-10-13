@@ -128,7 +128,7 @@ The whole TV design guide (foundations, system, styles, components), the TV app 
 | TV-BU / TV-BY (screen sleep) | Only full-screen playback keeps the TV awake; the muted browsing preview does not block the screensaver. |
 | Audio | Full-screen playback takes audio focus (the Assistant and other apps duck or pause it) and pauses when the audio output disconnects. Preferred audio languages: the viewer's last choice, then French, then Portuguese. |
 | Lists guideline | Single-choice lists use radio indicators. The row shown in the preview carries an "▶ Aperçu" indicator, not only a background colour. |
-| Buttons guideline | One main action per screen as a filled button, placed first; secondary actions outlined; focused buttons grow 1.1×. |
+| Buttons guideline | One main action per screen as a filled button, placed first; secondary actions outlined; focused buttons grow 1.1× with a light fill and no glow or shadow. |
 | Cards / layout grid | Four Home columns share the actual width after the drawer and 58 dp side margins (186.5 dp on the 960 dp TV canvas), with 20 dp gaps. Lane cards stay visible without horizontal scrolling. |
 | Accessibility (text scaling) | Verified at 130 % system text size: cards grow with their text and lane titles drop their small emoji instead of clipping. Text size, theme, density and locale changes no longer restart the app. |
 | TV-SB (search) | In-app search from the drawer and each list. The remote's search/mic key is handled by Google TV itself and never reaches the app. |
@@ -181,7 +181,7 @@ Verified on the 1080p Google TV emulator at normal and 130% text: six/five-colum
 | FR-8 | Open a channel full-screen and restore the prior browsing context on Back. | Verified on emulator: plays with sound; zapping works; Back restores the last watched row. |
 | FR-9 | Display provider programme schedules with times, current/upcoming status and descriptions. | Implemented through Xtream get_simple_data_table; real TF1 schedule verified on emulator. Empty feeds remain playable. |
 | FR-10 | Browse provider movies separately with categories, search and on-demand playback. | Implemented; emulator catalog exposes 53,538 movies and movie playback verified. |
-| FR-11 | Browse provider series separately and select seasons and episodes. | Verified on emulator: 12,159 series, season/episode lists, episode playback and Back restoring the second episode. |
+| FR-11 | Browse provider series separately and select seasons and episodes. | Verified on emulator: series catalogs, season/episode lists, episode playback and Back restoration. Choosing Séries hands focus to content; opening a series keeps the drawer collapsed while episodes load. |
 
 ## Technical design
 
@@ -222,6 +222,10 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 | 8 | Cold start from cache ≈ 4 s on the emulator with a debug build (≈ 3.3 s reading the cache); a release build on hardware should be faster. Not yet measured on a target device. |
 
 ## Known issues
+
+- **Removal confirmation and button focus (2026-10-13):** long OK on Continue Watching and the movie-details removal action now open the same confirmation dialog. Annuler starts focused; Cancel/Back preserve progress, while Retirer removes the entry and returns to browsing. The dialog shares the original-press release guard. Button glow/shadow is disabled while the light focus fill and scale remain. Verified on the 1080p Google TV emulator, with 22 passing unit tests and independent visual review.
+
+- **Remote controls verification (2026-10-13):** drawer selection explicitly hands focus into content; series episode loading retains focus outside the drawer. Continue Watching removal consumes the remainder of the current OK/Enter press at the app root, preventing its release from activating the replacement card. Emulator checks cover Séries selection, opening a series, removing the last movie resume entry and the next ordinary OK. All 22 unit tests pass; the release-event regression failed before the guard was implemented. Physical remote testing remains unverified.
 
 - **Category navigation verification (2026-10-13):** reproduced hidden movie Continue Watching before the fix. After reinstall, unfinished movies and the Luck S1 E1 entry remain visible in provider categories on the Google TV emulator. Back restores movie selection and position. All 19 unit tests pass, including a category change from grid item 120, independent movie/series sessions and unchanged-category restoration.
 

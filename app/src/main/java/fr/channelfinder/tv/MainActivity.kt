@@ -72,6 +72,7 @@ private fun ChannelFinderApp(probe: String? = null) {
 
     Box(
         Modifier.fillMaxSize()
+            .guardConfirmPress(state.confirmPressGuard)
             .background(Palette.Ink)
             .background(Brush.verticalGradient(0f to Palette.InkTop, 0.55f to Palette.Ink))
     ) {

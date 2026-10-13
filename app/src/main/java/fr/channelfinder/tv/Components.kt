@@ -122,6 +122,7 @@ fun FocusSurface(
     outline: Color? = null,
     enabled: Boolean = true,
     interactionSource: MutableInteractionSource? = null,
+    focusedGlow: Boolean = true,
     body: @Composable BoxScope.() -> Unit
 ) {
     if (onLongClick == null) {
@@ -130,7 +131,7 @@ fun FocusSurface(
             container = container, focusedContainer = Palette.FocusFill,
             content = content, focusedContent = Palette.OnFocus,
             border = outline?.let { BorderStroke(1.5.dp, it) }, focusedBorder = null,
-            focusedScale = focusedScale, interactionSource = interactionSource, body = body
+            focusedScale = focusedScale, interactionSource = interactionSource, focusedGlow = focusedGlow, body = body
         )
         return
     }
@@ -154,7 +155,7 @@ fun FocusSurface(
             border = if (outline != null) Border(BorderStroke(1.5.dp, outline), shape = shape) else Border.None
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = focusedScale, pressedScale = 1f),
-        glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Palette.Accent.copy(alpha = 0.35f), 12.dp)),
+        glow = ClickableSurfaceDefaults.glow(focusedGlow = if (focusedGlow) Glow(Palette.Accent.copy(alpha = 0.35f), 12.dp) else Glow(Color.Transparent, 0.dp)),
         interactionSource = interactionSource,
         content = body
     )
@@ -179,6 +180,7 @@ private fun PlainSurface(
     focusedBorder: BorderStroke?,
     focusedScale: Float,
     interactionSource: MutableInteractionSource?,
+    focusedGlow: Boolean = true,
     body: @Composable BoxScope.() -> Unit
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
@@ -192,7 +194,7 @@ private fun PlainSurface(
         modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .then(
-                if (focused) Modifier.shadow(14.dp, shape, ambientColor = Palette.Accent, spotColor = Palette.Accent)
+                if (focused && focusedGlow) Modifier.shadow(14.dp, shape, ambientColor = Palette.Accent, spotColor = Palette.Accent)
                 else Modifier
             )
             .clip(shape)
@@ -294,6 +296,7 @@ fun TvButton(
         content = if (primary) Palette.OnFocus else Palette.OnSurface,
         outline = if (primary) null else Palette.Faint,
         focusedScale = 1.1f,
+        focusedGlow = false,
         enabled = enabled
     ) {
         Row(

@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
@@ -18,6 +18,7 @@ import coil3.compose.AsyncImage
 @Composable
 fun VodContinueRow(state: AppState, session: LibrarySession, entries: List<VodWatch>, focus: FocusRequester?) {
     val account = state.account ?: return
+    var pendingRemoval by remember { mutableStateOf<VodWatch?>(null) }
     val targetKey = entries.firstOrNull { it.key == session.resumeFocusId }?.key ?: entries.first().key
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
         Text("Continuer à regarder", style = Type.Title, color = Palette.OnSurface)
@@ -29,7 +30,10 @@ fun VodContinueRow(state: AppState, session: LibrarySession, entries: List<VodWa
                             .then(if (focus != null && entry.key == targetKey) Modifier.focusRequester(focus) else Modifier)
                             .onFocusChanged {
                             if (it.hasFocus) { session.highlighted = entry.displayItem; session.resumeFocusId = entry.key; session.focusedId = null }
-                        }, onLongClick = { state.watchHistory.remove(account, entry) },
+                        }, onLongClick = {
+                            state.confirmPressGuard.consumeCurrentPress()
+                            pendingRemoval = entry
+                        },
                         shape = RoundedCornerShape(Cinema.CardRadius), container = Cinema.Panel) {
                         Row(Modifier.fillMaxSize()) {
                             AsyncImage(entry.displayItem.artwork, null, Modifier.fillMaxHeight().width(72.dp), contentScale = ContentScale.Crop)
@@ -45,5 +49,11 @@ fun VodContinueRow(state: AppState, session: LibrarySession, entries: List<VodWa
             }
         }
         Text("OK pour reprendre · OK long pour retirer", style = Type.Caption, color = Palette.Faint)
+    }
+    pendingRemoval?.let { entry ->
+        VodRemovalDialog(state, entry, onDismiss = { pendingRemoval = null }, onConfirm = {
+            pendingRemoval = null
+            state.watchHistory.remove(account, entry)
+        })
     }
 }

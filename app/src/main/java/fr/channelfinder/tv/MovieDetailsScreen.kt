@@ -37,6 +37,7 @@ fun MovieDetailsScreen(state: AppState, page: Page.MovieDetails) {
     val watch = state.watchHistory.find(account, item, LibraryKind.MOVIES)
     val resumable = watch != null && !watch.completed && watch.positionMs >= 5_000
     val playFocus = remember { FocusRequester() }
+    var pendingRemoval by remember { mutableStateOf<VodWatch?>(null) }
     LaunchedEffect(Unit) { focusWhenReady(playFocus) }
     Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top)
         .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.Row)) {
@@ -49,7 +50,7 @@ fun MovieDetailsScreen(state: AppState, page: Page.MovieDetails) {
                 icon = Icons.Rounded.PlayArrow, primary = true)
             if (watch != null && watch.positionMs > 0) TvButton("Recommencer",
                 { state.navigate(Page.VodPlayer(item, LibraryKind.MOVIES, startOver = true)) }, icon = Icons.Rounded.Replay)
-            if (watch != null && resumable) TvButton("Retirer de Reprendre", { state.watchHistory.remove(account, watch) })
+            if (watch != null && resumable) TvButton("Retirer de Reprendre", { pendingRemoval = watch })
         }
         var expanded by remember { mutableStateOf(false) }
         if (item.overview.isNotBlank()) FocusSurface({ expanded = !expanded }, Modifier.fillMaxWidth(), container = Cinema.Panel, focusedScale = 1f) {
@@ -64,5 +65,11 @@ fun MovieDetailsScreen(state: AppState, page: Page.MovieDetails) {
             Text("Les détails ne sont pas disponibles. Vous pouvez regarder le film.", style = Type.Caption, color = Palette.Muted)
             TvButton("Actualiser les détails", { retry++ })
         }
+    }
+    pendingRemoval?.let { entry ->
+        VodRemovalDialog(state, entry, onDismiss = { pendingRemoval = null }, onConfirm = {
+            pendingRemoval = null
+            state.watchHistory.remove(account, entry)
+        })
     }
 }

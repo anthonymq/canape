@@ -34,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -42,7 +41,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -93,7 +91,16 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
     var drawerHasFocus by remember { mutableStateOf(false) }
     var contentHasFocus by remember { mutableStateOf(false) }
     val active = state.activeDest
-    val focusManager = LocalFocusManager.current
+    val contentFocus = remember { FocusRequester() }
+    var destinationSelected by remember { mutableStateOf(false) }
+
+    LaunchedEffect(active, destinationSelected) {
+        if (destinationSelected) {
+            delay(16)
+            focusWhenReady(contentFocus)
+            destinationSelected = false
+        }
+    }
 
     LaunchedEffect(state.drawerFocusRequest) {
         if (state.drawerFocusRequest > 0) {
@@ -124,9 +131,10 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
                 fun select(dest: NavDest) {
                     // Choosing the current screen just hands focus back to it.
                     if (dest == active && state.isDrawerRoot || dest == NavDest.HOME && state.backStack.size == 1) {
-                        focusManager.moveFocus(FocusDirection.Right)
+                        destinationSelected = true
                     } else {
                         state.openDestination(dest)
+                        destinationSelected = true
                     }
                 }
                 DrawerItem(topEntry, active, requesters, ::select)
@@ -145,6 +153,8 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
             Modifier.fillMaxSize()
                 .padding(start = DrawerContentInset)
                 .onFocusChanged { contentHasFocus = it.hasFocus }
+                .focusRequester(contentFocus)
+                .focusGroup()
         ) { content() }
     }
 }

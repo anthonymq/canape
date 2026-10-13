@@ -31,13 +31,15 @@ Preserve existing native transitions: 150 ms surface scale; 160/120 ms screen cr
 Live lane sorting, country counts and search, and movie/series filtering run off the UI thread. Search fields update immediately; pending results show Recherche… and never expose results from an older query as the current selection. Initial focus restoration waits for completed results and does not interrupt typing. Empty-result recovery checks also run in the background.
 
 ## 7. Depth & surface
-Mixed tonal depth and focus elevation. Rows use 14 dp corners, cards/preview 16 dp, badges 6 dp, buttons/chips circular. Existing focus glow/shadow uses Accent with light focus outlines. Selection uses a tonal fill and check/preview glyph; focus must remain distinct from selection.
+Mixed tonal depth and focus elevation. Rows use 14 dp corners, cards/preview 16 dp, badges 6 dp, buttons/chips circular. Buttons use a light focus fill and scale without glow or shadow; other existing surfaces retain their Accent glow and light focus outlines. Selection uses a tonal fill and check/preview glyph; focus must remain distinct from selection.
 
 ## 8. Accessibility constraints & existing limitations
 All essential actions must be reachable with D-pad only. Preserve 58/28 dp TV safe margins, visible focus, 4.5:1 normal text / 3:1 large text contrast, password masking, and the HTTP transport warning. No account credentials on shared screens. Icon-only actions require accessibility names; selected chips expose selection state.
 Existing limitations: provider logos/availability vary; event timezone is undocumented; physical-TV performance is unmeasured; programme coverage depends on the saved provider. Country flags remain existing navigational cues rather than introducing a new icon system. Setup with saved real credentials is not screenshotted in QA.
 
 ## Films and series extension
+
+Continue Watching removal opens a shared confirmation dialog naming the title. Annuler receives initial focus, Retirer carries a trash icon, and Back cancels. The original held OK press is consumed in both the app root and dialog window so its release cannot trigger another action. Movie details uses the same confirmation.
 
 Provider category changes keep Continue Watching visible for the current library, independent of the title's category. A changed category clears title search, selected poster/hero and scroll position, then restores focus at the top after its results arrive. Reselecting the current category without an active search preserves the browsing position. Back from details/player preserves the current category's selection and scroll. Title search continues to hide Continue Watching while active.
 Netflix-inspired VOD library: artwork leads, focused titles have a cinematic hero, and Continue Watching precedes discovery. Real provider art and metadata only; no invented recommendations, ratings or trailers. Live TV retains its existing system.

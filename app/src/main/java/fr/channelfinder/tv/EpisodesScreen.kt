@@ -2,6 +2,7 @@ package fr.channelfinder.tv
 
 import android.os.CancellationSignal
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -41,12 +42,17 @@ fun EpisodesScreen(state: AppState, page: Page.Episodes) {
         } catch (failure: CatalogException) { error = failure.message }
     }
     val rows = session.catalog?.items
+    val loadingFocus = remember { FocusRequester() }
+    LaunchedEffect(page.series.id) {
+        if (rows == null) loadingFocus.requestFocus()
+    }
     val history = state.watchHistory.entries(account).filter { it.series?.id == page.series.id }
     val latest = history.maxByOrNull { it.updatedAt }
     val next = rows?.let { all -> latest?.let { last -> all.dropWhile { it.id != last.item.id }.drop(1).firstOrNull() } }
     val suggested = if (latest?.completed == false) rows?.firstOrNull { it.id == latest.item.id } else next ?: rows?.firstOrNull()
     val seasonCount = rows?.map { it.season }?.distinct()?.size ?: 0
-    Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top),
+    Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top)
+        .focusRequester(loadingFocus).focusable(enabled = rows == null),
         verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
         VodHero(page.series, if (rows == null) "Série" else "Série · $seasonCount saison${if (seasonCount == 1) "" else "s"}",
             Modifier.height(if (LocalDensity.current.fontScale > 1.15f) 190.dp else 160.dp), titleLines = 1) {

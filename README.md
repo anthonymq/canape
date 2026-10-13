@@ -19,6 +19,8 @@ Open **Films** or **Séries** in the navigation drawer for a poster grid and a c
 
 Continue Watching remains visible when choosing a movie or series category, including titles from other categories. Choosing a different category clears title search and starts at the top. Selecting the current category without an active search keeps your place; Back from details or playback restores the selection and scroll position.
 
+Choosing a drawer destination moves focus into its content and collapses the menu. Opening a series keeps the menu collapsed while episodes load. Long OK on Continue Watching, or the removal action in movie details, asks for confirmation. **Annuler** is focused first; it and Back preserve the entry. Choose **Retirer** to remove it. Releasing the original long press cannot activate the dialog or start playback.
+
 ## Category favorites
 
 Open **Catégories** from Home, search or browse the provider's category list, then select the star on a category row. Pinned categories appear on Home with their channel counts and open directly to that category. Category favorites are stored locally by Xtream category ID, so labels do not need to be parsed from channel names.
