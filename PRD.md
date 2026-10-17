@@ -235,6 +235,8 @@ Before calling a build ready, verify on a Google TV device or emulator with a re
 
 ## Known issues
 
+- **Drawer opening from Home lane cards (2026-10-17):** opening France (or another lane) from its Home card briefly expanded the drawer, because the lane screen has nothing focusable while it computes its list and focus fell into the drawer until the list took it. After a page change not started from the drawer, drawer items cannot take focus until the content does, a remote key is pressed, or 3 s pass. Redroid recordings before/after verify the France card no longer expands the drawer; Left and Back still open it, and drawer selection still hands focus to content. Debug build and unit tests pass. Physical-TV behaviour remains unverified.
+
 - **Menu transition flicker (2026-10-13):** drawer destinations replace the page without overlapping fades. New destinations restore their own focus; reselecting the current menu item still hands focus back to content. Movie/series loading and empty states have a search-field fallback. Before/after Google TV recordings verify France/Português transitions; Movies, Series and current-destination reselection retain visible content focus. Debug build and all 22 unit tests pass. Physical-TV transitions remain unverified.
 
 - **Dense movie/series browsing (2026-10-13):** removed the discovery banner so the poster grid uses the full region below the search/category header. Poster focus keeps scale 1.0 and the white outline; removed its delayed extra scroll request. Debug build and unit tests pass. Google TV emulator screenshots verify both libraries, horizontal focus without card movement, and next-row scrolling. Physical-TV behavior remains unverified.

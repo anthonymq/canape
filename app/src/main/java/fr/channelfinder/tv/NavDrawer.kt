@@ -32,12 +32,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -51,6 +53,9 @@ import androidx.tv.material3.NavigationDrawerItemDefaults
 import androidx.tv.material3.NavigationDrawerScope
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Collapsed rail width; screens inside the drawer start their content just after it. */
 private val RailWidth = 80.dp
@@ -102,8 +107,19 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
         }
     }
 
+    // A screen opened from its content (a Home lane card) can have nothing focusable while it loads;
+    // without this hold, focus would fall into the drawer and expand it until the screen takes focus.
+    var holdDrawer by remember { mutableStateOf(false) }
+    LaunchedEffect(state.page) {
+        if (drawerHasFocus) return@LaunchedEffect
+        holdDrawer = true
+        withTimeoutOrNull(3_000) { snapshotFlow { contentHasFocus }.dropWhile { it }.first { it } }
+        holdDrawer = false
+    }
+
     LaunchedEffect(state.drawerFocusRequest) {
         if (state.drawerFocusRequest > 0) {
+            holdDrawer = false
             delay(16)
             runCatching { requesters.getValue(active).requestFocus() }
         }
@@ -136,17 +152,18 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
                         state.openDestination(dest)
                     }
                 }
-                DrawerItem(topEntry, active, requesters, ::select)
+                DrawerItem(topEntry, active, requesters, ::select, holdDrawer)
                 Spacer(Modifier.height(8.dp))
                 mainEntries.forEach { entry ->
-                    DrawerItem(entry, active, requesters, ::select, badge = if (entry.dest == NavDest.EVENTS) state.eventCounts.first else 0)
+                    DrawerItem(entry, active, requesters, ::select, holdDrawer, badge = if (entry.dest == NavDest.EVENTS) state.eventCounts.first else 0)
                 }
                 Spacer(Modifier.height(8.dp))
-                bottomEntries.forEach { entry -> DrawerItem(entry, active, requesters, ::select) }
+                bottomEntries.forEach { entry -> DrawerItem(entry, active, requesters, ::select, holdDrawer) }
             }
         },
         scrimBrush = Brush.horizontalGradient(listOf(Color.Black.copy(alpha = 0.85f), Color.Black.copy(alpha = 0.4f))),
-        modifier = Modifier.fillMaxSize()
+        // Any remote key ends the hold, so Left always reaches the drawer.
+        modifier = Modifier.fillMaxSize().onPreviewKeyEvent { holdDrawer = false; false }
     ) {
         Box(
             Modifier.fillMaxSize()
@@ -164,12 +181,13 @@ private fun NavigationDrawerScope.DrawerItem(
     active: NavDest,
     requesters: Map<NavDest, FocusRequester>,
     onSelect: (NavDest) -> Unit,
+    hold: Boolean,
     badge: Int = 0
 ) {
     NavigationDrawerItem(
         selected = entry.dest == active,
         onClick = { onSelect(entry.dest) },
-        modifier = Modifier.padding(vertical = 1.dp).focusRequester(requesters.getValue(entry.dest)),
+        modifier = Modifier.padding(vertical = 1.dp).focusRequester(requesters.getValue(entry.dest)).focusProperties { canFocus = !hold },
         leadingContent = {
             Box(contentAlignment = Alignment.Center) {
                 if (entry.icon != null) Icon(entry.icon, contentDescription = null, modifier = Modifier.size(24.dp))
