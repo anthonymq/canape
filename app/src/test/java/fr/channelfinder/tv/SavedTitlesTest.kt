@@ -19,12 +19,12 @@ class SavedTitlesTest {
         assertEquals(listOf(SavedTitle(LibraryItem("3", "Série"), LibraryKind.SERIES)), parseSavedTitles(text))
     }
 
-    @Test fun everyDestinationHasItsOwnSidebarEntry() {
-        assertEquals(listOf(NavDest.SEARCH, NavDest.HOME, NavDest.FRANCE, NavDest.PORTUGUESE,
+    @Test fun sidebarStartsAtHomeAndKeepsSearchInTheContentToolbar() {
+        assertEquals(listOf(NavDest.HOME, NavDest.FRANCE, NavDest.PORTUGUESE,
             NavDest.SPORTS, NavDest.EVENTS, NavDest.FAVORITES, NavDest.MOVIES, NavDest.SERIES,
             NavDest.SAVED, NavDest.GUIDE, NavDest.CATEGORIES, NavDest.SETTINGS),
             navigationItems.map { it.first })
-        assertEquals(NavDest.entries.toSet() - NavDest.DIRECT, navigationItems.map { it.first }.toSet())
+        assertEquals(NavDest.entries.toSet() - setOf(NavDest.DIRECT, NavDest.SEARCH), navigationItems.map { it.first }.toSet())
         assertTrue(navigationItems.all { it.second.isNotBlank() })
     }
 }

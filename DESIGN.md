@@ -1,5 +1,9 @@
 # Canapé design system
 
+## Sidebar focus correction (2026-10-20)
+
+Remove the sidebar search destination; retain search inside live and library toolbars. Home is the first sidebar item. A page transition must never focus or expand the rail automatically while incoming content loads. Permit entry after an explicit Left key in content or a drawer focus request (Back); preserve an already focused drawer during destination selection. Reset entry permission for each new page. Global-search pages have no sidebar selection and use Home as the drawer-entry focus fallback.
+
 ## Persistent library metadata (2026-10-20, Test14)
 
 Films/Séries reuse the last successful catalog from private on-device storage after process restarts. Previously visited movie details and series episode lists use the same cache. Render cached content first; revalidate on entry after six hours, retaining useful content on network failure or an empty replacement. Fresh entries avoid repeated provider requests. Keep existing grids, controls, focus and artwork components; no new loading overlay when cached content exists. Account-isolated metadata storage is bounded to128MiB with64MiB per entry and evicts older detail entries before catalogs. Media playback remains streaming; image bytes use the existing image loader cache.

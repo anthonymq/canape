@@ -29,7 +29,6 @@ import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 
 private val navigationGroups = listOf(
-    listOf(NavDest.SEARCH to "Rechercher"),
     listOf(NavDest.HOME to "Accueil", NavDest.FRANCE to "France", NavDest.PORTUGUESE to "Português",
         NavDest.SPORTS to "Sports", NavDest.EVENTS to "Événements", NavDest.FAVORITES to "Favoris"),
     listOf(NavDest.MOVIES to "Films", NavDest.SERIES to "Séries", NavDest.SAVED to "Ma liste"),
@@ -43,18 +42,20 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
     val active = state.activeDest
     var navigationFocused by remember { mutableStateOf(false) }
     var contentFocused by remember { mutableStateOf(false) }
-    var contentReady by remember { mutableStateOf(false) }
+    var navigationRequested by remember(state.page) { mutableStateOf(false) }
     var enterContent by remember { mutableIntStateOf(0) }
     val contentFocus = remember { FocusRequester() }
     val initialFocusRequest = remember { state.drawerFocusRequest }
+    val entryDestination = active.takeIf { it in requesters } ?: NavDest.HOME
     val navigationScroll = rememberScrollState()
     LaunchedEffect(enterContent) {
         if (enterContent > 0) { delay(32); focusWhenReady(contentFocus) }
     }
     LaunchedEffect(state.drawerFocusRequest) {
         if (state.drawerFocusRequest > initialFocusRequest) {
+            navigationRequested = true
             delay(16)
-            focusWhenReady(requesters[active])
+            focusWhenReady(requesters[entryDestination])
         }
     }
     BackHandler(enabled = navigationFocused && state.page != Page.Home) {
@@ -69,7 +70,11 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
     }
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().padding(start = contentInset)
-            .onFocusChanged { contentFocused = it.hasFocus; if (it.hasFocus) contentReady = true }
+            .onFocusChanged { contentFocused = it.hasFocus }
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.DirectionLeft && event.type == KeyEventType.KeyDown) navigationRequested = true
+                false
+            }
             .focusRequester(contentFocus).focusRestorer().focusGroup()) { content() }
         if (navigationFocused) {
             Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(
@@ -80,7 +85,7 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
             .width(if (navigationFocused) Spacing.RailExpanded else Spacing.RailWidth)
             .fillMaxHeight()
             .onFocusChanged { navigationFocused = it.hasFocus }
-            .focusProperties { onEnter = { requesters.getValue(active).requestFocus() } }
+            .focusProperties { onEnter = { requesters.getValue(entryDestination).requestFocus() } }
             .focusGroup().onPreviewKeyEvent { event ->
                 if (event.key == Key.DirectionRight) {
                     if (event.type == KeyEventType.KeyDown) enterContent++
@@ -112,7 +117,7 @@ fun AppDrawer(state: AppState, content: @Composable () -> Unit) {
                         enterContent++
                     },
                     modifier = Modifier.fillMaxWidth().focusRequester(requesters.getValue(dest))
-                        .focusProperties { canFocus = contentReady || state.drawerFocusRequest > initialFocusRequest }
+                        .focusProperties { canFocus = navigationRequested || navigationFocused }
                         .semantics { selected = active == dest; contentDescription = label },
                     container = if (active == dest) Palette.Surface2 else Color.Transparent,
                     content = if (active == dest) Palette.OnSurface else Palette.Muted,
