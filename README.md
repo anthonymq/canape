@@ -146,6 +146,16 @@ The app has been tested on a Google TV emulator. Physical TV performance and vie
 
 Found something that gets between you and your next watch? [Open an issue](https://github.com/anthonymq/canape/issues) with your TV model, Android version, Canapé version, and the steps to reproduce it.
 
+## Mises à jour dans l’application
+
+Les nouvelles versions équipées de l’outil de mise à jour vérifient leur canal au démarrage et au retour dans l’application (au maximum une vérification toutes les six heures dans une session). **Réglages → Mise à jour de l’application** permet aussi de vérifier manuellement et de désactiver la vérification automatique. Une proposition apparaît sur Accueil, jamais par-dessus une lecture. **Plus tard** la ferme. Le téléchargement commence après votre choix ; Retour l’annule.
+
+Après vérification du fichier, choisissez **Installer**. La première fois, autorisez Canapé à installer des applications dans les réglages Android, puis revenez dans Canapé et choisissez Installer. Confirmez la mise à jour dans l’écran système. Le compte et les réglages restent conservés. Ce parcours hors Play Store nécessite la confirmation Android.
+
+Le canal stable lit `update.json` dans la dernière release GitHub stable ; Salon Test lit `update-salon.json` dans `salon-test-20261018`. Le manifeste décrit l’APK : identité, versionCode, minSdk, taille, SHA-256 et URL GitHub HTTPS. L’application refuse un autre paquet, une version plus ancienne ou une signature différente de celle de l’application installée. Le workflow de release génère et publie le manifeste stable avec l’APK signé.
+
+Pour Salon : incrémentez le versionCode, nommez l’APK `canape-salon-google-tv-test.apk`, puis lancez `AAPT2=/chemin/vers/aapt2 bash scripts/update-manifest.sh /chemin/canape-salon-google-tv-test.apk salon-test-20261018 /tmp/update-salon.json`. Publiez d’abord l’APK, puis `update-salon.json` dans la même prerelease. Gardez la même clé de signature et vérifiez le SHA du téléchargement public. Publier l’APK seul ne met pas à jour le flux automatique.
+
 ## Build it yourself
 
 Native **Kotlin + Jetpack Compose for TV**, with **Media3** playback. You'll need JDK 17 and Android SDK 37.

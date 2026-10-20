@@ -95,7 +95,7 @@ Drive the UI with the D-pad (`adb shell input keyevent DPAD_DOWN|DPAD_UP|DPAD_LE
 - Text fields: one Back closes the keyboard and ends editing (`TvTextField` watches the IME insets). In the browser the search field is three Ups from the list (list → quality/country row → lane chips → search).
 - Never show the Xtream username or password on screen outside the account form.
 - The Google TV emulator sometimes shows a "Set up Google TV" prompt over the app; relaunch with `adb shell am start -n fr.channelfinder.tv/.MainActivity`.
-- Preview stays muted and starts only after focus settles (650 ms). Release players when leaving composition.
+- Preview audio is enabled by explicit user request (2026-10-18), after focus settles (650 ms). The app-owned LivePlaybackSession survives preview/fullscreen handoff; never release it from either surface. Stop on settled empty browsing results and background; release when leaving live browsing/playback or the app composition.
 - Many channels fail on the provider side with HTTP 407, some always and some intermittently (see PRD "Unavailable channels"). Verify playback with a known-good channel (search "TF1") or the stream probe before blaming the app.
 - With the drawer, Back on Accueil opens the drawer and the next Back leaves the app. The first D-pad key in the second after launch may only give focus to the first card.
 - When driving the emulator, never press Back on Home with France focused: it leaves the app, and the Google TV setup/sign-in screens take the next keystrokes. Check `dumpsys activity activities | grep topResumed` before typing.
