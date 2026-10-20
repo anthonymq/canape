@@ -2,6 +2,9 @@ package fr.channelfinder.tv
 
 import android.os.CancellationSignal
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,6 +24,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun EpisodesScreen(state: AppState, page: Page.Episodes) {
     val account = state.account ?: return
@@ -33,10 +37,22 @@ fun EpisodesScreen(state: AppState, page: Page.Episodes) {
     DisposableEffect(cancellation) { onDispose { cancellation.cancel() } }
     LaunchedEffect(session, retry) {
         error = null
-        if (session.catalog != null) return@LaunchedEffect
         try {
+            val key = "episodes:${page.series.id}"
+            if (session.catalog == null) {
+                val cached = withContext(Dispatchers.IO) { state.libraryCache.load(account, key) }
+                if (cached != null) {
+                    session.catalog = cached.catalog
+                    session.catalogSavedAt = cached.savedAt
+                }
+            }
+            if (retry == 0 && session.catalog?.let { LibraryCache.Entry(it, session.catalogSavedAt).isFresh() } == true) return@LaunchedEffect
             val episodes = withContext(Dispatchers.IO) { state.vodRepository.episodes(account, page.series.id, cancellation) }
-            session.catalog = LibraryCatalog(emptyList(), episodes)
+            if (episodes.isEmpty() && session.catalog?.items?.isNotEmpty() == true) return@LaunchedEffect
+            val fresh = LibraryCatalog(emptyList(), episodes)
+            session.catalog = fresh
+            session.catalogSavedAt = System.currentTimeMillis()
+            withContext(Dispatchers.IO) { state.libraryCache.save(account, key, fresh, session.catalogSavedAt) }
         } catch (cancelled: CancellationException) { throw cancelled
         } catch (_: android.os.OperationCanceledException) { throw CancellationException()
         } catch (failure: CatalogException) { error = failure.message }
@@ -51,14 +67,17 @@ fun EpisodesScreen(state: AppState, page: Page.Episodes) {
     val next = rows?.let { all -> latest?.let { last -> all.dropWhile { it.id != last.item.id }.drop(1).firstOrNull() } }
     val suggested = if (latest?.completed == false) rows?.firstOrNull { it.id == latest.item.id } else next ?: rows?.firstOrNull()
     val seasonCount = rows?.map { it.season }?.distinct()?.size ?: 0
-    Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top)
+    Column(Modifier.fillMaxSize().background(Cinema.Background).padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.ContentTop, bottom = Spacing.Top)
         .focusRequester(loadingFocus).focusable(enabled = rows == null),
         verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
         VodHero(page.series, if (rows == null) "Série" else "Série · $seasonCount saison${if (seasonCount == 1) "" else "s"}",
-            Modifier.height(if (LocalDensity.current.fontScale > 1.15f) 190.dp else 160.dp), titleLines = 1) {
+            Modifier.heightIn(min = if (LocalDensity.current.fontScale > 1.15f) 144.dp else 112.dp), titleLines = 1, compact = true) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (suggested != null) TvButton(
                 if (latest?.completed == false) "Reprendre S${suggested.season} · E${suggested.episode}" else if (next != null) "Épisode suivant" else "Commencer la série",
                 { state.navigate(Page.VodPlayer(suggested, LibraryKind.SERIES, page.series)) }, icon = Icons.Rounded.PlayArrow, primary = true, compact = true)
+            SaveTitleButton(state, page.series, LibraryKind.SERIES)
+            }
         }
         if (rows == null) LibraryStatus(error ?: "Chargement des épisodes…", error != null) { retry++ }
         else if (rows.isEmpty()) LibraryStatus("Le fournisseur ne propose aucun épisode pour cette série.", true) { session.catalog = null; retry++ }
@@ -80,8 +99,14 @@ fun EpisodesScreen(state: AppState, page: Page.Episodes) {
                     focusWhenReady(focus)
                 }
             }
+            val clearance = with(LocalDensity.current) { 8.dp.toPx() }
+            val bringIntoView = remember(clearance) { object : BringIntoViewSpec {
+                override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float =
+                    libraryScrollDistance(offset, size, containerSize, clearance)
+            } }
+            CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoView) {
             LazyVerticalGrid(GridCells.Fixed(if (LocalDensity.current.fontScale > 1.15f) 2 else 3), Modifier.weight(1f), state = session.grid,
-                contentPadding = PaddingValues(8.dp), horizontalArrangement = Arrangement.spacedBy(Cinema.GridGap),
+                contentPadding = PaddingValues(10.dp), horizontalArrangement = Arrangement.spacedBy(Cinema.GridGap),
                 verticalArrangement = Arrangement.spacedBy(Cinema.GridGap)) {
                 items(filtered, key = { it.id }) { episode ->
                     val watch = history.firstOrNull { it.item.id == episode.id }
@@ -91,6 +116,7 @@ fun EpisodesScreen(state: AppState, page: Page.Episodes) {
                         onPlay = { state.navigate(Page.VodPlayer(episode, LibraryKind.SERIES, page.series)) },
                         onRestart = { state.navigate(Page.VodPlayer(episode, LibraryKind.SERIES, page.series, startOver = true)) })
                 }
+            }
             }
             Text("OK pour regarder · OK long pour recommencer", style = Type.Caption, color = Palette.Faint)
         }

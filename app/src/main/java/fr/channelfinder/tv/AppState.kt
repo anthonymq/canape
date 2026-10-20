@@ -1,6 +1,7 @@
 package fr.channelfinder.tv
 
 import android.content.Context
+import androidx.core.content.edit
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.History
@@ -31,14 +32,18 @@ private val preferredCountries = mapOf(
 
 /** App-wide state: catalog, back stack, favorites, recents and per-screen positions. */
 class AppState(context: Context, private val scope: CoroutineScope) {
+    internal val updater = AppUpdater(context.applicationContext, scope)
+    internal val livePlayback = LivePlaybackSession(context.applicationContext)
     private val credentialStore = CredentialStore(context)
     private val prefs = context.getSharedPreferences("channel_usage", Context.MODE_PRIVATE)
     private val cache = CatalogCache(context)
     val repository = XtreamRepository()
+    internal val libraryCache = LibraryCache(java.io.File(context.filesDir, "library_cache"))
     val vodRepository = VodRepository(repository)
     val watchHistory = VodWatchStore(context)
     val librarySessions = mutableMapOf<LibraryKind, LibrarySession>()
     val episodeSessions = mutableMapOf<String, LibrarySession>()
+    val homeResumeSessions = mutableMapOf<String, LibrarySession>()
     val guideRepository = GuideRepository(repository)
 
     var account by mutableStateOf(credentialStore.load())
@@ -129,6 +134,15 @@ class AppState(context: Context, private val scope: CoroutineScope) {
         qualityFilter = quality
         prefs.edit().putString("quality_filter", quality?.name).apply()
     }
+
+    fun setCountry(page: Page.Browse, country: String?) {
+        prefs.edit { putString(browseCountryPreferenceKey(page), country) }
+        replaceTop(page.copy(country = country))
+    }
+
+    private fun restoreCountry(page: Page): Page = if (page is Page.Browse) {
+        page.copy(country = prefs.getString(browseCountryPreferenceKey(page), page.country))
+    } else page
     var browserListState by mutableStateOf(LazyListState())
         private set
     var categoryListState by mutableStateOf(LazyListState())
@@ -136,6 +150,8 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     var categoryFocusId by mutableStateOf<String?>(null)
     val homeListState = LazyListState()
     var homeFocusKey by mutableStateOf<String?>(null)
+    val savedListState = LazyListState()
+    var savedFocusKey by mutableStateOf<String?>(null)
 
     var notice by mutableStateOf<Notice?>(null)
 
@@ -174,17 +190,25 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     }
 
     // region Navigation
+    private var lastLiveLane = BrowseLane.FRANCE
+
     fun navigate(target: Page) {
+        if (target is Page.Browse && target.categoryId == null && target.lane in listOf(
+                BrowseLane.FRANCE, BrowseLane.PORTUGUESE, BrowseLane.SPORTS, BrowseLane.EVENTS, BrowseLane.FAVORITES
+            )) lastLiveLane = target.lane
         when (target) {
             is Page.Browse -> { browserListState = LazyListState(); selectedChannelId = null }
             is Page.CategoryPicker -> { categoryListState = LazyListState(); categoryFocusId = null }
             else -> Unit
         }
-        backStack += target
+        backStack += restoreCountry(target)
     }
 
     fun replaceTop(target: Page) {
-        backStack[backStack.lastIndex] = target
+        val current = backStack.last()
+        val changingScope = target is Page.Browse && current is Page.Browse &&
+            browseCountryPreferenceKey(target) != browseCountryPreferenceKey(current)
+        backStack[backStack.lastIndex] = if (changingScope) restoreCountry(target) else target
     }
 
     fun back() {
@@ -200,6 +224,8 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     fun openDestination(dest: NavDest) {
         val target = when (dest) {
             NavDest.HOME -> null
+            NavDest.DIRECT -> Page.Browse(lastLiveLane)
+            NavDest.SAVED -> Page.Saved
             NavDest.SEARCH -> Page.Browse(BrowseLane.ALL, startSearch = true)
             NavDest.FRANCE -> Page.Browse(BrowseLane.FRANCE)
             NavDest.PORTUGUESE -> Page.Browse(BrowseLane.PORTUGUESE)
@@ -220,6 +246,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     val activeDest: NavDest
         get() = when (val root = backStack.getOrNull(1)) {
             null -> NavDest.HOME
+            Page.Saved -> NavDest.SAVED
             Page.Settings -> NavDest.SETTINGS
             is Page.Library -> if (root.kind == LibraryKind.MOVIES) NavDest.MOVIES else NavDest.SERIES
             is Page.Guide -> NavDest.GUIDE

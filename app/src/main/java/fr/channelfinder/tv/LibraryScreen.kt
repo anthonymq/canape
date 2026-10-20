@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -20,6 +21,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Text
 import kotlinx.coroutines.CancellationException
@@ -60,6 +63,7 @@ internal fun libraryScrollDistance(offset: Float, size: Float, containerSize: Fl
 
 class LibrarySession(val account: XcAccount?) {
     var catalog by mutableStateOf<LibraryCatalog?>(null)
+    var catalogSavedAt: Long = 0
     var category by mutableStateOf<String?>(null)
     var query by mutableStateOf("")
     var sort by mutableStateOf(LibrarySort.PROVIDER)
@@ -109,17 +113,30 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
     val cancellation = remember(session, retry) { CancellationSignal() }
     DisposableEffect(cancellation) { onDispose { cancellation.cancel() } }
     LaunchedEffect(session, retry) {
-        if (session.catalog != null) return@LaunchedEffect
         error = null
         val account = state.account ?: return@LaunchedEffect
         try {
-            session.catalog = withContext(Dispatchers.IO) { state.vodRepository.load(account, page.kind, cancellation) }
+            val key = "catalog:${page.kind.name}"
+            if (session.catalog == null) {
+                val cached = withContext(Dispatchers.IO) { state.libraryCache.load(account, key) }
+                if (cached != null) {
+                    session.catalog = cached.catalog
+                    session.catalogSavedAt = cached.savedAt
+                }
+            }
+            if (retry == 0 && session.catalog?.let { LibraryCache.Entry(it, session.catalogSavedAt).isFresh() } == true) return@LaunchedEffect
+            val fresh = withContext(Dispatchers.IO) { state.vodRepository.load(account, page.kind, cancellation) }
+            if (fresh.items.isEmpty() && session.catalog?.items?.isNotEmpty() == true) return@LaunchedEffect
+            session.catalog = fresh
+            session.catalogSavedAt = System.currentTimeMillis()
+            withContext(Dispatchers.IO) { state.libraryCache.save(account, key, fresh, session.catalogSavedAt) }
         } catch (cancelled: CancellationException) { throw cancelled
         } catch (_: android.os.OperationCanceledException) { throw CancellationException()
         } catch (failure: CatalogException) { error = failure.message }
     }
     val catalog = session.catalog
     val headerFocus = remember { FocusRequester() }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(catalog) {
         if (catalog == null) focusWhenReady(headerFocus)
     }
@@ -129,7 +146,16 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
             catalog.items.forEach { item -> context.ensureActive(); item.searchKey }
         }
     }
-    Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top),
+    val queryTokens = remember(session.query) { ChannelText.tokens(session.query) }
+    val highlighted = (session.highlighted ?: catalog?.items?.firstOrNull())?.takeIf { item ->
+        (session.category == null || item.categoryId == session.category) && queryTokens.all { it in item.searchKey }
+    }
+    var featured by remember(session) { mutableStateOf(highlighted) }
+    LaunchedEffect(highlighted) { kotlinx.coroutines.delay(Cinema.ArtworkSettleMs); featured = highlighted }
+    Box(Modifier.fillMaxSize()) {
+    ProgrammeBackdrop(featured, Modifier.matchParentSize())
+    Column(Modifier.fillMaxSize().padding(start = Spacing.Side + Spacing.RailInset, end = Spacing.Side,
+        top = Spacing.Top, bottom = Spacing.Top),
         verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
         Row(Modifier.onPreviewKeyEvent { event ->
             if (!editing && event.key == Key.DirectionDown && enterContent != null) {
@@ -137,12 +163,20 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
                 true
             } else false
         }, horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Text(page.kind.title, style = Type.Headline, color = Palette.OnSurface)
-            TvTextField(session.query, { session.query = it }, "Rechercher un titre", editing, { editing = it },
+            if (editing) TvTextField(session.query, { session.query = it }, "Rechercher un titre", editing, {
+                editing = it
+                if (!it) scope.launch { kotlinx.coroutines.delay(32); focusWhenReady(headerFocus) }
+            },
                 icon = Icons.Rounded.Search, modifier = Modifier.weight(1f).focusRequester(headerFocus))
-            TvButton("Catégories", { categoryOpen = true }, icon = Icons.Rounded.GridView, compact = true, enabled = catalog != null)
-            TvButton("Trier", { sortOpen = true }, compact = true, enabled = catalog != null)
+            else {
+                TvButton("Rechercher", { editing = true }, Modifier.focusRequester(headerFocus), icon = Icons.Rounded.Search, compact = true)
+                TvChip("Catégories", session.category != null, { categoryOpen = true }, compact = true)
+                TvButton("Trier", { sortOpen = true }, icon = Icons.AutoMirrored.Rounded.Sort, compact = true, enabled = catalog != null)
+                Text(session.query.ifBlank { page.kind.title }, style = Type.Caption, color = Palette.Muted,
+                    modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
+        ProgrammeFeature(featured, page.kind.title, Modifier.height(if (LocalDensity.current.fontScale > 1.15f) Cinema.LargeFeatureHeight else Cinema.FeatureHeight))
         if (catalog == null) {
             if (error != null) LibraryStatus(error.orEmpty(), true) { retry++ } else LibrarySkeleton()
         } else {
@@ -150,6 +184,7 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
             if (categoryOpen) LibraryCategoryDialog(catalog, session, onClose = { categoryOpen = false })
             if (sortOpen) LibrarySortDialog(session) { sortOpen = false }
         }
+    }
     }
 }
 
@@ -194,7 +229,7 @@ private fun LibraryGrid(state: AppState, session: LibrarySession, kind: LibraryK
     val target = rows.firstOrNull { it.id == session.focusedId } ?: rows.firstOrNull()
     val category = catalog.categories.firstOrNull { it.id == session.category }?.name
         ?: if (kind == LibraryKind.MOVIES) "Tous les films" else "Toutes les séries"
-    val columns = if (LocalDensity.current.fontScale > 1.15f) 5 else 6
+    val columns = if (LocalDensity.current.fontScale > 1.15f) 6 else 8
     DisposableEffect(session.grid, loadedRows, showResume) {
         onEntryChanged(if (loadedRows == null || (rows.isEmpty() && !showResume)) null else {
             {

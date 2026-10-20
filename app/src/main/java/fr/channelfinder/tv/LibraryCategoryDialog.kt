@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
@@ -20,7 +21,8 @@ fun LibraryCategoryDialog(catalog: LibraryCatalog, session: LibrarySession, onCl
     var editing by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Column(Modifier.width(560.dp).fillMaxHeight(0.85f).background(Cinema.Background, RoundedCornerShape(Cinema.CardRadius))
+        Box(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top), contentAlignment = Alignment.CenterStart) {
+        Column(Modifier.width(320.dp).fillMaxHeight().background(Cinema.Background, RoundedCornerShape(Cinema.CardRadius))
             .padding(Spacing.Top), verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
             Text("Choisir une catégorie", style = Type.Headline, color = Palette.OnSurface)
             TvTextField(query, { query = it }, "Rechercher une catégorie", editing, { editing = it }, modifier = Modifier.fillMaxWidth())
@@ -34,6 +36,7 @@ fun LibraryCategoryDialog(catalog: LibraryCatalog, session: LibrarySession, onCl
                 }
                 if (rows.isEmpty()) item { Text("Aucune catégorie trouvée", style = Type.Body, color = Palette.Muted) }
             }
+        }
         }
         LaunchedEffect(Unit) { focusWhenReady(focus) }
     }

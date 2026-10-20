@@ -4,6 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -15,20 +18,37 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        hideSystemBars()
         val debuggable = applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0
         val probe = if (debuggable) intent.getStringExtra("probe") else null
         setContent { ChannelFinderTheme { ChannelFinderApp(probe) } }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
     }
 }
 
@@ -37,6 +57,15 @@ private fun ChannelFinderApp(probe: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val state = remember { AppState(context.applicationContext, scope) }
+    val liveScreen = state.page is Page.Browse || state.page is Page.Player
+    DisposableEffect(state, liveScreen) {
+        onDispose { if (liveScreen) state.livePlayback.release() }
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { state.livePlayback.stop() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { state.updater.check() }
+    LaunchedEffect(state.page, state.updater.status, state.updater.automatic) {
+        if (state.page == Page.Home) state.updater.offerOnHome()
+    }
 
     LaunchedEffect(Unit) { state.start() }
     // Debug builds only: `adb shell am start -n fr.channelfinder.tv/.MainActivity -e probe 30` checks streams.
@@ -106,6 +135,7 @@ private fun ChannelFinderApp(probe: String? = null) {
                     is Page.LoadError -> LoadErrorScreen(page.message, onRetry = state::retry, onEditAccount = state::editAccount)
                     is Page.Setup -> SetupScreen(state, page)
                     Page.Home -> HomeScreen(state)
+                    Page.Saved -> HomeScreen(state, saved = true)
                     Page.Settings -> SettingsScreen(state)
                     is Page.Library -> LibraryScreen(state, page)
                     is Page.Episodes -> EpisodesScreen(state, page)
@@ -120,10 +150,11 @@ private fun ChannelFinderApp(probe: String? = null) {
         }
         // The navigation drawer frames the browsing screens; playback, setup and loading stay full screen.
         val withDrawer = when (state.page) {
-            Page.Home, Page.Settings, is Page.CategoryPicker, is Page.Browse, is Page.Library, is Page.Episodes, is Page.MovieDetails -> true
+            Page.Home, Page.Saved, Page.Settings, is Page.Browse, is Page.CategoryPicker, is Page.Library, is Page.Episodes, is Page.MovieDetails -> true
             else -> false
         }
         if (withDrawer) AppDrawer(state) { pages() } else pages()
-        NoticeHost(state.notice, atBottom = state.page == Page.Home)
+        NoticeHost(state.notice, atBottom = withDrawer)
+        if (state.updater.dialogOpen) AppUpdateDialog(state.updater)
     }
 }

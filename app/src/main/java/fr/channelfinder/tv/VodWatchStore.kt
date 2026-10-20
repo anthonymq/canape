@@ -19,6 +19,10 @@ data class VodWatch(
     val displayItem: LibraryItem get() = series ?: item
 }
 
+data class SavedTitle(val item: LibraryItem, val kind: LibraryKind) {
+    val key: String get() = "${kind.name}:${item.id}"
+}
+
 internal fun watchCompleted(position: Long, duration: Long, ended: Boolean): Boolean =
     ended || (duration > 0 && position >= duration * 0.95)
 
@@ -32,6 +36,7 @@ class VodWatchStore(context: Context) {
     private val prefs = context.getSharedPreferences("vod_watch_history", Context.MODE_PRIVATE)
     private var accountKey = ""
     private var history by mutableStateOf(emptyList<VodWatch>())
+    private var saved by mutableStateOf(emptyList<SavedTitle>())
 
     fun entries(account: XcAccount): List<VodWatch> {
         val key = MessageDigest.getInstance("SHA-256").digest(
@@ -41,12 +46,27 @@ class VodWatchStore(context: Context) {
             accountKey = key
             history = try { parseWatchHistory(prefs.getString(key, "[]").orEmpty()) }
             catch (_: JSONException) { emptyList() }
+            saved = try { parseSavedTitles(prefs.getString("$key:saved", "[]").orEmpty()) }
+            catch (_: JSONException) { emptyList() }
         }
         return history
     }
 
     fun find(account: XcAccount, item: LibraryItem, kind: LibraryKind): VodWatch? =
         entries(account).firstOrNull { it.item.id == item.id && it.kind == kind }
+
+    fun savedTitles(account: XcAccount): List<SavedTitle> {
+        entries(account)
+        return saved
+    }
+
+    fun toggleSaved(account: XcAccount, item: LibraryItem, kind: LibraryKind) {
+        entries(account)
+        val title = SavedTitle(item, kind)
+        saved = if (saved.any { it.key == title.key }) saved.filter { it.key != title.key }
+        else (listOf(title) + saved).take(500)
+        prefs.edit().putString("$accountKey:saved", serializeSavedTitles(saved)).apply()
+    }
 
     fun save(account: XcAccount, entry: VodWatch) {
         val current = entries(account)
@@ -69,6 +89,7 @@ internal fun serializeWatchHistory(entries: List<VodWatch>): String = JSONArray(
 private fun LibraryItem.toJson(): JSONObject = JSONObject().apply {
     put("id", id); put("title", title); put("category", categoryId); put("art", artwork)
     put("extension", extension); put("season", season); put("episode", episode)
+    put("backdrop", backdrop); put("year", year); put("rating", rating); put("overview", overview)
 }
 
 private fun parseWatchItem(json: JSONObject): LibraryItem? {
@@ -76,8 +97,24 @@ private fun parseWatchItem(json: JSONObject): LibraryItem? {
     val title = json.optString("title")
     if (id.isBlank() || title.isBlank()) return null
     return LibraryItem(id, title, json.optString("category"), json.optString("art"),
-        json.optString("extension", "mp4"), json.optInt("season"), json.optInt("episode"))
+        json.optString("extension", "mp4"), json.optInt("season"), json.optInt("episode"),
+        backdrop = json.optString("backdrop"), year = json.optString("year"), rating = json.optString("rating"),
+        overview = json.optString("overview"))
 }
+
+internal fun serializeSavedTitles(titles: List<SavedTitle>): String = JSONArray().apply {
+    titles.forEach { title -> put(JSONObject().put("kind", title.kind.name).put("item", title.item.toJson())) }
+}.toString()
+
+internal fun parseSavedTitles(text: String): List<SavedTitle> = buildList {
+    val array = JSONArray(text)
+    for (index in 0 until array.length()) {
+        val json = array.optJSONObject(index) ?: continue
+        val kind = LibraryKind.entries.firstOrNull { it.name == json.optString("kind") } ?: continue
+        val item = json.optJSONObject("item")?.let(::parseWatchItem) ?: continue
+        add(SavedTitle(item, kind))
+    }
+}.distinctBy { it.key }.take(500)
 
 private fun VodWatch.toJson(): JSONObject = JSONObject().apply {
     put("item", item.toJson()); put("kind", kind.name); put("series", series?.toJson())

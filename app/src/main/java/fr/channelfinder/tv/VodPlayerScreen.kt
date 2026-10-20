@@ -31,6 +31,8 @@ import androidx.media3.ui.PlayerView
 @Composable
 fun VodPlayerScreen(state: AppState, page: Page.VodPlayer) {
     val context = LocalContext.current
+    val composeView = androidx.compose.ui.platform.LocalView.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val account = state.account ?: return
     val player = remember(page.item, account) { buildStreamPlayer(context, fullScreen = true, audioLanguages = state.audioLanguages) }
     val initialPosition = remember(player) { if (page.startOver) 0L else state.watchHistory.find(account, page.item, page.kind)?.resumeMs ?: 0L }
@@ -96,7 +98,7 @@ fun VodPlayerScreen(state: AppState, page: Page.VodPlayer) {
         }
     }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(factory = {
+        if (error == null && !ended) AndroidView(factory = {
             PlayerView(it).apply {
                 this.player = player
                 useController = true
@@ -110,7 +112,7 @@ fun VodPlayerScreen(state: AppState, page: Page.VodPlayer) {
                 requestFocus()
                 showController()
             }
-        }, modifier = Modifier.fillMaxSize())
+        }, onRelease = { it.player = null }, modifier = Modifier.fillMaxSize())
         if (controlsVisible && !ended && error == null) Column(Modifier.align(Alignment.TopStart)
             .padding(horizontal = Spacing.Side, vertical = Spacing.Top).background(Color.Black.copy(alpha = 0.65f)).padding(Spacing.Gutter)) {
             Text(page.series?.title ?: page.item.title, style = Type.Title, color = Palette.OnSurface)
@@ -133,11 +135,26 @@ fun VodPlayerScreen(state: AppState, page: Page.VodPlayer) {
                     }
                 }
             }
-            LaunchedEffect(Unit) { focusWhenReady(focus) }
+            LaunchedEffect(Unit) {
+                delay(100)
+                focusManager.clearFocus(force = true)
+                composeView.requestFocus()
+                focusWhenReady(focus)
+            }
         }
         error?.let { message ->
+            val retryFocus = remember { FocusRequester() }
             Box(Modifier.fillMaxSize().background(Palette.Ink).padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
-                LibraryStatus(message, true) { error = null; player.prepare(); player.play() }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Row)) {
+                    Text(message, style = Type.Body, color = Palette.OnSurface)
+                    TvButton("Réessayer", { error = null; player.prepare(); player.play() }, Modifier.focusRequester(retryFocus), primary = true)
+                }
+            }
+            LaunchedEffect(Unit) {
+                delay(100)
+                focusManager.clearFocus(force = true)
+                composeView.requestFocus()
+                focusWhenReady(retryFocus)
             }
         }
     }

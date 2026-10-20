@@ -74,6 +74,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.onPreInterceptKeyBeforeSoftKeyboard
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
@@ -122,7 +123,7 @@ fun FocusSurface(
     outline: Color? = null,
     enabled: Boolean = true,
     interactionSource: MutableInteractionSource? = null,
-    focusedGlow: Boolean = true,
+    focusedGlow: Boolean = false,
     body: @Composable BoxScope.() -> Unit
 ) {
     if (onLongClick == null) {
@@ -180,7 +181,7 @@ private fun PlainSurface(
     focusedBorder: BorderStroke?,
     focusedScale: Float,
     interactionSource: MutableInteractionSource?,
-    focusedGlow: Boolean = true,
+    focusedGlow: Boolean = false,
     body: @Composable BoxScope.() -> Unit
 ) {
     val source = interactionSource ?: remember { MutableInteractionSource() }
@@ -268,7 +269,7 @@ fun CardSurface(
             focusedBorder = Border(BorderStroke(3.dp, Palette.FocusFill), inset = 3.dp, shape = shape)
         ),
         scale = ClickableSurfaceDefaults.scale(focusedScale = focusedScale, pressedScale = minOf(1.02f, focusedScale)),
-        glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Palette.Accent.copy(alpha = 0.3f), 18.dp)),
+        glow = ClickableSurfaceDefaults.glow(focusedGlow = Glow(Color.Transparent, 0.dp)),
         interactionSource = interactionSource,
         content = body
     )
@@ -292,11 +293,10 @@ fun TvButton(
         interactionSource = interaction,
         modifier = modifier.heightIn(min = 42.dp),
         shape = CircleShape,
-        // TV buttons guideline: the main action is a filled button, others are outlined; focus grows 1.1×.
-        container = if (primary) Palette.Accent else Color.Transparent,
-        content = if (primary) Palette.OnFocus else Palette.OnSurface,
-        outline = if (primary) null else Palette.Faint,
-        focusedScale = 1.1f,
+        container = if (primary) Palette.AccentDeep else Palette.Surface2,
+        content = Palette.OnSurface,
+        outline = if (primary) Palette.Muted else null,
+        focusedScale = 1.04f,
         focusedGlow = false,
         enabled = enabled
     ) {
@@ -312,15 +312,15 @@ fun TvButton(
 }
 
 @Composable
-fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
+fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false, maxLines: Int = Int.MAX_VALUE) {
     FocusSurface(
         onClick = onClick,
         modifier = modifier.heightIn(min = if (compact) 32.dp else 38.dp).semantics { this.selected = selected },
         shape = CircleShape,
         container = if (selected) Palette.AccentDeep else Color.Transparent,
         content = if (selected) Palette.OnSurface else Palette.Muted,
-        outline = if (selected) Palette.Accent else Palette.Outline,
-        focusedScale = 1.06f
+        outline = null,
+        focusedScale = 1f
     ) {
         Row(
             Modifier.align(Alignment.Center).padding(horizontal = if (compact) 12.dp else 15.dp, vertical = 6.dp),
@@ -328,7 +328,8 @@ fun TvChip(text: String, selected: Boolean, onClick: () -> Unit, modifier: Modif
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             if (selected) Icon(Icons.Rounded.Check, contentDescription = null, modifier = Modifier.size(if (compact) 14.dp else 16.dp))
-            Text(text, style = if (compact) Type.Caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else Type.Label)
+            Text(text, style = if (compact) Type.Caption.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) else Type.Label,
+                maxLines = maxLines, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -403,6 +404,7 @@ fun TvTextField(
     val interaction = remember { MutableInteractionSource() }
     val focused by interaction.collectIsFocusedAsState()
     var fieldFocused by remember { mutableStateOf(false) }
+    var backHeld by remember { mutableStateOf(false) }
 
     fun stopEditing() {
         keyboard?.hide()
@@ -482,6 +484,14 @@ fun TvTextField(
                     modifier = Modifier.fillMaxWidth()
                         .focusRequester(fieldFocus)
                         .focusProperties { canFocus = editing }
+                        .onPreInterceptKeyBeforeSoftKeyboard { event ->
+                            if (event.key != Key.Back && event.key != Key.Escape) false
+                            else if (editing || backHeld) {
+                                if (event.type == KeyEventType.KeyDown) backHeld = true
+                                if (event.type == KeyEventType.KeyUp) { backHeld = false; stopEditing() }
+                                true
+                            } else false
+                        }
                         .onFocusChanged {
                             if (fieldFocused && !it.isFocused && editing) onEditingChange(false)
                             fieldFocused = it.isFocused

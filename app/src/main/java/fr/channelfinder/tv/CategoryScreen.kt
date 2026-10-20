@@ -99,7 +99,7 @@ fun CategoryPickerScreen(state: AppState, page: Page.CategoryPicker) {
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.Top, bottom = 20.dp)) {
+    Column(Modifier.fillMaxSize().padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.ContentTop, bottom = Spacing.Top)) {
         ScreenHeader(
             "${number.format(rows.size)} catégories · ${state.pinnedCategories.size} épinglée${if (state.pinnedCategories.size > 1) "s" else ""}",
             "Catégories"
@@ -149,8 +149,6 @@ fun CategoryPickerScreen(state: AppState, page: Page.CategoryPicker) {
                     }
                 }
             }
-            Spacer(Modifier.height(10.dp))
-            HintBar("OK" to "Ouvrir", "▶ puis OK" to "Épingler sur l’accueil", "RETOUR" to "Menu")
         }
     }
 }

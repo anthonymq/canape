@@ -29,19 +29,26 @@ fun MovieDetailsScreen(state: AppState, page: Page.MovieDetails) {
     LaunchedEffect(page.item, retry) {
         detailsError = false
         try {
-            item = withContext(Dispatchers.IO) { state.vodRepository.movieDetails(account, page.item, cancellation) }
+            val key = "movie:${page.item.id}"
+            val cached = withContext(Dispatchers.IO) { state.libraryCache.load(account, key) }
+            cached?.catalog?.items?.firstOrNull()?.let { item = it }
+            if (retry == 0 && cached?.isFresh() == true) return@LaunchedEffect
+            val fresh = withContext(Dispatchers.IO) { state.vodRepository.movieDetails(account, page.item, cancellation) }
+            item = fresh.copy(overview = fresh.overview.ifBlank { item.overview }, year = fresh.year.ifBlank { item.year },
+                rating = fresh.rating.ifBlank { item.rating }, backdrop = fresh.backdrop.ifBlank { item.backdrop })
+            withContext(Dispatchers.IO) { state.libraryCache.save(account, key, LibraryCatalog(emptyList(), listOf(item))) }
         } catch (cancelled: CancellationException) { throw cancelled
         } catch (_: android.os.OperationCanceledException) { throw CancellationException()
-        } catch (_: CatalogException) { detailsError = true }
+        } catch (_: CatalogException) { detailsError = item.overview.isBlank() }
     }
     val watch = state.watchHistory.find(account, item, LibraryKind.MOVIES)
     val resumable = watch != null && !watch.completed && watch.positionMs >= 5_000
     val playFocus = remember { FocusRequester() }
     var pendingRemoval by remember { mutableStateOf<VodWatch?>(null) }
     LaunchedEffect(Unit) { focusWhenReady(playFocus) }
-    Column(Modifier.fillMaxSize().background(Cinema.Background).padding(horizontal = Spacing.Side, vertical = Spacing.Top)
+    Column(Modifier.fillMaxSize().background(Cinema.Background).padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.ContentTop, bottom = Spacing.Top)
         .verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(Spacing.Row)) {
-        VodHero(item, "Film", Modifier.height(240.dp)) {
+        VodHero(item, "Film", Modifier.heightIn(min = 168.dp)) {
             if (watch != null) VodProgress(watch, Modifier.width(240.dp))
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter), verticalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
@@ -51,6 +58,7 @@ fun MovieDetailsScreen(state: AppState, page: Page.MovieDetails) {
             if (watch != null && watch.positionMs > 0) TvButton("Recommencer",
                 { state.navigate(Page.VodPlayer(item, LibraryKind.MOVIES, startOver = true)) }, icon = Icons.Rounded.Replay)
             if (watch != null && resumable) TvButton("Retirer de Reprendre", { pendingRemoval = watch })
+            SaveTitleButton(state, item, LibraryKind.MOVIES)
         }
         var expanded by remember { mutableStateOf(false) }
         if (item.overview.isNotBlank()) FocusSurface({ expanded = !expanded }, Modifier.fillMaxWidth(), container = Cinema.Panel, focusedScale = 1f) {

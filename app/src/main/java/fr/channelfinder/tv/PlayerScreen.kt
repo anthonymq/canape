@@ -11,6 +11,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,6 +35,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -50,7 +52,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -74,10 +76,10 @@ private enum class PlayStatus { LOADING, PLAYING, ERROR, NOT_STARTED }
 
 @Composable
 fun PlayerScreen(state: AppState, page: Page.Player) {
-    val context = LocalContext.current
     val account = state.account ?: return
     val playlist = page.playlist.ifEmpty { listOf(page.channelId) }
-    val player = remember { buildStreamPlayer(context, fullScreen = true, audioLanguages = state.audioLanguages) }
+    val session = state.livePlayback
+    val player = remember(session) { session.player() }
     // Leaving the app (Home button, another app, screensaver) stops the stream: nothing plays out of sight,
     // and the provider's single connection is freed. Coming back reloads at the live point.
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -85,7 +87,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     // Play/Pause on the remote (TV-PP). Live TV has no timeshift, so resuming returns to the live point.
     var userPaused by remember { mutableStateOf(false) }
     var tracksOpen by remember { mutableStateOf(false) }
-    var tracks by remember { mutableStateOf(Tracks.EMPTY) }
+    var tracks by remember { mutableStateOf(player.currentTracks) }
     val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
 
     var status by remember { mutableStateOf(PlayStatus.LOADING) }
@@ -93,8 +95,10 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     var buffering by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf("") }
     var autoRetries by remember { mutableIntStateOf(0) }
+    var retryJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val currentId by rememberUpdatedState(page.channelId)
+    val currentlyStarted by rememberUpdatedState(started)
     var attempt by remember { mutableIntStateOf(0) }
     // "Essayer quand même" on an event that has not started (kickoff times can be in another time zone).
     var forceStart by remember(page.channelId) { mutableStateOf(false) }
@@ -106,6 +110,9 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     val retryFocus = remember { FocusRequester() }
 
     val shownChannel = state.channelsById[playlist[pendingIndex]] ?: state.channelsById[page.channelId] ?: return
+    var programmeNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) { while (true) { delay(30_000); programmeNow = System.currentTimeMillis() } }
+    val schedule = rememberProgrammeSchedule(account, shownChannel.id, state.guideRepository, programmeNow)
 
     fun showBanner() { bannerVisible = true; bannerTick++ }
     fun setPaused(paused: Boolean) {
@@ -140,6 +147,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
+                if (session.channelId != currentId) return
                 buffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY) {
                     status = PlayStatus.PLAYING
@@ -152,33 +160,43 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             override fun onTracksChanged(newTracks: Tracks) { tracks = newTracks }
 
             override fun onPlayerError(error: PlaybackException) {
+                if (session.channelId != currentId || !currentlyStarted) return
+                retryJob?.cancel()
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition()
                     player.prepare()
                     return
                 }
                 // Provider failures are often intermittent: retry twice, a little later each time, before bothering the viewer.
-                if (autoRetries < 2) {
+                val problem = playbackProblem(error)
+                if (problem.retryAutomatically && autoRetries < 2) {
+                    buffering = true
                     autoRetries++
                     val wait = 1_500L * autoRetries
-                    scope.launch { delay(wait); player.prepare() }
+                    val failedId = currentId
+                    retryJob = scope.launch {
+                        delay(wait)
+                        if (currentId == failedId && currentlyStarted && state.page is Page.Player) player.prepare()
+                    }
                     return
                 }
-                errorText = playbackErrorMessage(error)
+                errorText = problem.message
                 status = PlayStatus.ERROR
-                state.markUnavailable(currentId)
+                if (problem.marksChannelUnavailable) state.markUnavailable(currentId)
             }
         }
         player.addListener(listener)
         onDispose {
+            retryJob?.cancel()
             player.removeListener(listener)
-            player.release()
         }
     }
 
     LaunchedEffect(page.channelId, attempt, started) {
+        retryJob?.cancel()
+        if (state.page !is Page.Player) return@LaunchedEffect
         if (!started) {
-            player.stop()
+            session.stop()
             return@LaunchedEffect
         }
         userPaused = false
@@ -187,15 +205,14 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
         autoRetries = 0
         val channel = state.channelsById[page.channelId] ?: return@LaunchedEffect
         if (!forceStart && ChannelText.notStartedYet(channel.event)) {
-            player.stop()
-            player.clearMediaItems()
+            session.stop()
             status = PlayStatus.NOT_STARTED
             return@LaunchedEffect
         }
-        player.setMediaItem(MediaItem.fromUri(state.repository.streamUrl(account, channel)))
-        player.volume = 1f
-        player.playWhenReady = true
-        player.prepare()
+        val continuing = attempt == 0 && session.hasStream(channel.id)
+        if (continuing && player.playbackState == Player.STATE_READY) status = PlayStatus.PLAYING
+        session.play(channel.id, { MediaItem.fromUri(state.repository.streamUrl(account, channel)) },
+            state.audioLanguages, restart = attempt > 0)
         showBanner()
     }
     LaunchedEffect(pendingIndex) {
@@ -207,7 +224,7 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
     }
     LaunchedEffect(bannerTick, status, userPaused) {
         if (status == PlayStatus.PLAYING && !userPaused) {
-            delay(5_000)
+            delay(3_000)
             bannerVisible = false
         }
     }
@@ -258,12 +275,15 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             .focusable()
     ) {
         AndroidView(
-            factory = { videoSurface(it, keepAwake = true).apply { this.player = player } },
-            update = { view -> if (view.player !== player) view.player = player },
+            factory = { videoSurface(it, keepAwake = true).also(session::attach) },
+            onReset = null,
+            onRelease = session::detach,
+            update = { view -> if (state.page is Page.Player) session.attach(view) },
             modifier = Modifier.fillMaxSize()
         )
 
-        if (status != PlayStatus.ERROR && status != PlayStatus.NOT_STARTED && (!firstFrame || pendingIndex != playlist.indexOf(page.channelId))) {
+        val audioOnly = status == PlayStatus.PLAYING && tracks.groups.any { it.type == C.TRACK_TYPE_AUDIO } && tracks.groups.none { it.type == C.TRACK_TYPE_VIDEO }
+        if (status != PlayStatus.ERROR && status != PlayStatus.NOT_STARTED && ((!firstFrame && !audioOnly) || pendingIndex != playlist.indexOf(page.channelId))) {
             // Dim the previous picture while the next channel loads so the loading message stays readable.
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = if (firstFrame) 0.7f else 0f)))
             Column(Modifier.align(Alignment.Center).padding(bottom = 120.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -275,6 +295,12 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
             }
         } else if (status == PlayStatus.PLAYING && buffering) {
             Spinner(Modifier.align(Alignment.Center).size(44.dp))
+        } else if (audioOnly) {
+            Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
+                ChannelLogo(shownChannel, Modifier.size(width = 120.dp, height = 72.dp))
+                Spacer(Modifier.height(12.dp))
+                Text("Lecture audio", style = Type.Caption, color = Palette.Muted)
+            }
         }
 
         if (status == PlayStatus.NOT_STARTED) {
@@ -336,8 +362,8 @@ fun PlayerScreen(state: AppState, page: Page.Player) {
                 hasTrackChoice = hasTrackChoice && status == PlayStatus.PLAYING,
                 position = "${number.format(pendingIndex + 1)} / ${number.format(playlist.size)}",
                 isFavorite = shownChannel.id in state.favorites,
-                previous = if (playlist.size > 1) state.channelsById[playlist[(pendingIndex - 1 + playlist.size) % playlist.size]] else null,
-                next = if (playlist.size > 1) state.channelsById[playlist[(pendingIndex + 1) % playlist.size]] else null
+                schedule = schedule,
+                now = programmeNow
             )
         }
 
@@ -373,16 +399,16 @@ private fun ChannelBanner(
     hasTrackChoice: Boolean,
     position: String,
     isFavorite: Boolean,
-    previous: Channel?,
-    next: Channel?
+    schedule: ProgrammeSchedule,
+    now: Long
 ) {
     Column(
         Modifier.fillMaxWidth()
             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f), Color.Black.copy(alpha = 0.92f))))
-            .padding(start = Spacing.Side, end = Spacing.Side, top = 72.dp, bottom = Spacing.Top)
+            .padding(start = Spacing.Side, end = Spacing.Side, top = 24.dp, bottom = Spacing.Top)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-            ChannelLogo(channel, Modifier.size(width = 150.dp, height = 90.dp), corner = 14.dp, initialsSize = 30)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ChannelLogo(channel, Modifier.size(width = 64.dp, height = 40.dp), corner = 7.dp, initialsSize = 16)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
@@ -396,28 +422,23 @@ private fun ChannelBanner(
                         Text(if (paused) "EN PAUSE" else "EN DIRECT", style = Type.Badge, color = Color.White)
                     }
                     EventTag(channel)
-                    Text(position, style = Type.Label, color = Palette.Muted)
+                    Text(position, style = Type.Caption, color = Palette.Muted)
                     if (isFavorite) Icon(Icons.Rounded.Star, contentDescription = "Favori", tint = Palette.Gold, modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.height(6.dp))
-                Text(channel.displayName, style = Type.Display, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    channel.countryTag?.let { Badge(it, tone = Palette.Muted) }
-                    channel.badges.forEach { Badge(it, tone = Palette.Muted) }
-                    Text(channel.categoryDisplay, style = Type.Body, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+                Text(channel.displayName, style = Type.Title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Clock(style = Type.Display)
+            Clock(style = Type.Caption)
         }
-        Spacer(Modifier.height(18.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (previous != null) HintBar("▲" to previous.displayName)
-            if (next != null) HintBar("▼" to next.displayName)
-            Spacer(Modifier.weight(1f))
-            if (hasTrackChoice) HintBar("▶" to "Audio et sous-titres")
-            HintBar(if (paused) "OK" to "Reprendre le direct" else "OK" to "Masquer", "RETOUR" to "Liste")
-            HintBar("◀" to "Guide TV")
+        Spacer(Modifier.height(8.dp))
+        ProgrammeInfo(schedule, now)
+        Spacer(Modifier.height(8.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            HintBar("▲▼" to "Chaînes")
+            HintBar("OK" to if (paused) "Reprendre" else "Masquer")
+            HintBar("◀" to "Guide")
+            if (hasTrackChoice) HintBar("▶" to "Audio")
+            HintBar("RETOUR" to "Liste")
         }
     }
 }

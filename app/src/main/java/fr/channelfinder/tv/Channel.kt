@@ -60,13 +60,14 @@ enum class BrowseLane(val label: String) {
 }
 
 /** Destinations of the navigation drawer, in drawer order. */
-enum class NavDest { SEARCH, HOME, FRANCE, PORTUGUESE, SPORTS, EVENTS, FAVORITES, MOVIES, SERIES, GUIDE, CATEGORIES, SETTINGS }
+enum class NavDest { SEARCH, HOME, DIRECT, SAVED, FRANCE, PORTUGUESE, SPORTS, EVENTS, FAVORITES, MOVIES, SERIES, GUIDE, CATEGORIES, SETTINGS }
 
 sealed interface Page {
     data object Loading : Page
     data class LoadError(val message: String) : Page
     data class Setup(val message: String = "") : Page
     data object Home : Page
+    data object Saved : Page
     data object Settings : Page
     data class Library(val kind: LibraryKind) : Page
     data class Episodes(val series: LibraryItem) : Page
@@ -78,7 +79,6 @@ sealed interface Page {
         val categoryId: String? = null,
         val query: String = "",
         val startSearch: Boolean = false,
-        /** ISO country filter, only offered when the list mixes several countries. */
         val country: String? = null
     ) : Page
     data class Player(val channelId: String, val playlist: List<String>) : Page

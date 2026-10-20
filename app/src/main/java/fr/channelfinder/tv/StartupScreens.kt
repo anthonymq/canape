@@ -45,6 +45,8 @@ import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SportsSoccer
 import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Update
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -317,19 +319,35 @@ fun SettingsScreen(state: AppState) {
     }
     val host = state.account?.serverUrl?.let { runCatching { Uri.parse(it).host }.getOrNull() }.orEmpty()
     val updated = describeUpdate(state.lastUpdated)
+    val settingsScroll = rememberScrollState()
 
-    Column(Modifier.fillMaxSize().padding(horizontal = Spacing.Side, vertical = Spacing.Top)) {
+    Column(Modifier.fillMaxSize().padding(start = Spacing.Side, end = Spacing.Side, top = Spacing.ContentTop, bottom = Spacing.Top)) {
         ScreenHeader("Canapé", "Réglages", trailing = { Clock() })
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(12.dp))
         Column(
-            Modifier.widthIn(max = 720.dp).weight(1f).verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+            Modifier.widthIn(max = 720.dp).weight(1f).verticalScroll(settingsScroll).padding(vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            SettingsRow(
+                icon = Icons.Rounded.SystemUpdate,
+                title = "Mise à jour de l’application",
+                modifier = Modifier.focusRequester(firstFocus),
+                subtitle = when (val update = state.updater.status) {
+                    is UpdateStatus.Available -> "Version ${update.release.versionName} disponible"
+                    is UpdateStatus.Downloading -> "Téléchargement : ${update.percent} %"
+                    is UpdateStatus.Ready -> "Mise à jour prête à installer"
+                    else -> "Version $version · vérifier maintenant"
+                }
+            ) { state.updater.open() }
+            SettingsRow(
+                icon = Icons.Rounded.Update,
+                title = "Vérification automatique : ${if (state.updater.automatic) "activée" else "désactivée"}",
+                subtitle = "Au démarrage · téléchargement après votre confirmation"
+            ) { state.updater.toggleAutomatic() }
             SettingsRow(
                 icon = Icons.Rounded.Refresh,
                 title = if (state.refreshing) "Actualisation en cours…" else "Actualiser la liste des chaînes",
                 subtitle = "Dernière mise à jour : $updated",
-                modifier = Modifier.focusRequester(firstFocus),
                 trailing = { if (state.refreshing) Spinner(Modifier.size(24.dp), color = LocalContentColor.current, stroke = 3.dp) }
             ) { state.refresh(silent = false) }
             SettingsRow(
@@ -389,7 +407,12 @@ fun SettingsScreen(state: AppState) {
             style = Type.Caption, color = Palette.Faint
         )
         Spacer(Modifier.height(12.dp))
-        HintBar("OK" to "Choisir", "RETOUR" to "Menu")
+        val scrollHint = when {
+            settingsScroll.canScrollForward -> arrayOf("↓" to "Autres réglages")
+            settingsScroll.canScrollBackward -> arrayOf("↑" to "Réglages précédents")
+            else -> emptyArray()
+        }
+        HintBar("OK" to "Choisir", "RETOUR" to "Menu", *scrollHint)
     }
 }
 

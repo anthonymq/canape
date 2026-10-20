@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +39,12 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material.icons.rounded.LiveTv
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.SportsSoccer
+import androidx.compose.material.icons.rounded.Stadium
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +62,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -77,7 +85,7 @@ import java.util.Locale
 private const val FIRST_TILE = "lane:FRANCE"
 private const val ROW_LIMIT = 12
 
-private data class LaneStyle(val lane: BrowseLane, val emoji: String, val subtitle: String, val colors: List<Color>)
+private data class LaneStyle(val lane: BrowseLane, val icon: ImageVector)
 
 private val laneDest = mapOf(
     BrowseLane.FRANCE to NavDest.FRANCE, BrowseLane.PORTUGUESE to NavDest.PORTUGUESE,
@@ -85,15 +93,15 @@ private val laneDest = mapOf(
 )
 
 private val laneStyles = listOf(
-    LaneStyle(BrowseLane.FRANCE, "🇫🇷", "Chaînes françaises", listOf(Color(0xFF27448F), Color(0xFF162550))),
-    LaneStyle(BrowseLane.PORTUGUESE, "🇵🇹", "Portugal et Brésil", listOf(Color(0xFF1C6B45), Color(0xFF0F3527))),
-    LaneStyle(BrowseLane.SPORTS, "⚽", "France et Portugal", listOf(Color(0xFF8A4A16), Color(0xFF45240D))),
-    LaneStyle(BrowseLane.EVENTS, "🏟️", "Matchs et directs", listOf(Color(0xFF6A2A6E), Color(0xFF2E1533)))
+    LaneStyle(BrowseLane.FRANCE, Icons.Rounded.LiveTv),
+    LaneStyle(BrowseLane.PORTUGUESE, Icons.Rounded.Language),
+    LaneStyle(BrowseLane.SPORTS, Icons.Rounded.SportsSoccer),
+    LaneStyle(BrowseLane.EVENTS, Icons.Rounded.Stadium)
 )
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun HomeScreen(state: AppState) {
+fun HomeScreen(state: AppState, saved: Boolean = false) {
     val summaryRequests = remember { Semaphore(2) }
     var programmeNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); programmeNow = System.currentTimeMillis() } }
@@ -107,18 +115,38 @@ fun HomeScreen(state: AppState) {
     var removalFocusKey by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val number = remember { NumberFormat.getIntegerInstance(Locale.FRANCE) }
+    val listState = if (saved) state.savedListState else state.homeListState
+    val history = state.account?.let { state.watchHistory.entries(it) }.orEmpty()
+    val resume = LibraryKind.entries.flatMap { continueWatching(history, it) }.sortedByDescending { it.updatedAt }
+    val firstHomeFocus = FIRST_TILE
+    val resumeSessions = LibraryKind.entries.associateWith { kind ->
+        val key = "$saved:${kind.name}"
+        state.homeResumeSessions.getOrPut(key) { LibrarySession(state.account) }.let {
+            if (it.account == state.account) it else LibrarySession(state.account).also { fresh -> state.homeResumeSessions[key] = fresh }
+        }
+    }
+    val savedTitles = state.account?.let { state.watchHistory.savedTitles(it) }.orEmpty()
 
     fun Modifier.homeFocus(key: String) = this.focusRequester(requester(key)).onFocusChanged {
-        if (it.isFocused) state.homeFocusKey = key
+        if (it.isFocused) {
+            if (saved) state.savedFocusKey = key else state.homeFocusKey = key
+        }
     }
 
     LaunchedEffect(Unit) {
-        focusWhenReady(state.homeFocusKey?.let { requesters[it] }, requester(FIRST_TILE))
+        if (saved) {
+            val target = state.savedFocusKey?.takeUnless { key ->
+                key.startsWith("title:") && savedTitles.none { "title:${it.key}" == key }
+            }
+            if (target == null) listState.scrollToItem(0)
+            focusWhenReady(target?.let(::requester), requester("saved:live"))
+        }
+        else focusWhenReady(state.homeFocusKey?.let { requesters[it] }, requester(firstHomeFocus), requester(FIRST_TILE))
     }
 
     LaunchedEffect(removalFocusKey) {
         val target = removalFocusKey ?: return@LaunchedEffect
-        if (target == FIRST_TILE) state.homeListState.scrollToItem(0)
+        if (target == FIRST_TILE || target == "saved:live") listState.scrollToItem(0)
         focusWhenReady(requester(target))
         removalFocusKey = null
     }
@@ -127,8 +155,8 @@ fun HomeScreen(state: AppState) {
     // a second Back, from the drawer, leaves the app.
     BackHandler(enabled = homeHasFocus) {
         scope.launch {
-            state.homeFocusKey = FIRST_TILE
-            state.homeListState.animateScrollToItem(0)
+            state.homeFocusKey = firstHomeFocus
+            listState.animateScrollToItem(0)
             state.focusDrawer()
         }
     }
@@ -136,6 +164,47 @@ fun HomeScreen(state: AppState) {
     val recentChannels = state.recent.mapNotNull(state.channelsById::get).filter { it.lane != BrowseLane.EVENTS.label }
     val favoriteChannels = state.favorites.mapNotNull(state.channelsById::get)
     val pinned = state.pinnedCategories.mapNotNull(state.categoriesById::get)
+    val backdropWatch = if (recentChannels.isEmpty()) resume.firstOrNull() else null
+    val homeResumeSession = state.homeResumeSessions.getOrPut("home:all") { LibrarySession(state.account) }.let {
+        if (it.account == state.account) it else LibrarySession(state.account).also { fresh -> state.homeResumeSessions["home:all"] = fresh }
+    }
+    fun LazyListScope.resumeRows() {
+        if (!saved) {
+            if (resume.isNotEmpty()) item(key = "resume:all") {
+                Column(Modifier.padding(horizontal = Spacing.Side, vertical = 8.dp)) {
+                    VodContinueRow(state, homeResumeSession, resume, requester("resume:all"),
+                        onEntryFocused = { state.homeFocusKey = "resume:all" }, title = "À reprendre")
+                }
+            }
+            return
+        }
+        LibraryKind.entries.forEach { kind ->
+            val entries = resume.filter { it.kind == kind }
+            if (entries.isNotEmpty()) item(key = "resume:${kind.name}") {
+                Column(Modifier.padding(horizontal = Spacing.Side, vertical = 8.dp)) {
+                    VodContinueRow(state, resumeSessions.getValue(kind), entries, requester("resume:${kind.name}"), onEntryFocused = {
+                        if (saved) state.savedFocusKey = "resume:${kind.name}" else state.homeFocusKey = "resume:${kind.name}"
+                    }, title = if (kind == LibraryKind.MOVIES) "Films à reprendre" else "Séries à reprendre")
+                }
+            }
+        }
+    }
+    fun LazyListScope.recentRows(cardWidth: Dp) {
+        if (!saved && recentChannels.isNotEmpty()) item(key = "recent") {
+            HomeRow(title = "Vos dernières chaînes") {
+                recentChannels.take(ROW_LIMIT).forEach { channel ->
+                    key(channel.id) {
+                        ChannelCard(channel, isFavorite = channel.id in state.favorites, width = cardWidth,
+                            modifier = Modifier.homeFocus("recent:${channel.id}"), programmeSummary = programmeTitle(channel),
+                            onLongClick = { state.confirmPressGuard.consumeCurrentPress(); state.toggleFavorite(channel) }) {
+                            state.play(channel, recentChannels)
+                        }
+                    }
+                }
+                SeeAllCard(Modifier.homeFocus("recent:all")) { state.navigate(Page.Browse(BrowseLane.RECENT)) }
+            }
+        }
+    }
     val focusClearance = with(LocalDensity.current) { 10.dp.toPx() }
     val bringIntoView = remember(focusClearance) {
         object : BringIntoViewSpec {
@@ -153,32 +222,31 @@ fun HomeScreen(state: AppState) {
     }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val cardWidth = (maxWidth - Spacing.Side * 2 - Spacing.Gutter * 4) / 5
-        Column(Modifier.fillMaxSize()) {
+        if (!saved) ProgrammeBackdrop(backdropWatch?.displayItem, Modifier.matchParentSize(), brandFallback = true)
+        val contentInset = if (saved) 0.dp else Spacing.RailInset
+        val cardWidth = (maxWidth - contentInset - Spacing.Side * 2 - Spacing.Gutter * 5) / 6
+        Column(Modifier.fillMaxSize().padding(start = contentInset)) {
             CompositionLocalProvider(LocalBringIntoViewSpec provides bringIntoView) {
             LazyColumn(
-                state = state.homeListState,
+                state = listState,
                 modifier = Modifier.weight(1f).onFocusChanged { homeHasFocus = it.hasFocus },
-                contentPadding = PaddingValues(top = Spacing.Top, bottom = 10.dp)
+                contentPadding = PaddingValues(top = Spacing.Top, bottom = Spacing.Top)
             ) {
-                item(key = "header") {
+                if (saved) item(key = "header") {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = Spacing.Side),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(greeting().uppercase(), style = Type.Eyebrow, color = Palette.Accent)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Qu’est-ce qu’on regarde ?", style = Type.Display, color = Palette.OnSurface)
-                        }
-                        Clock(style = Type.Headline)
+                        Text("Ma liste", style = Type.Headline,
+                            color = Palette.OnSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        Clock(style = Type.Caption)
                     }
                 }
 
-                item(key = "lanes") {
+                if (!saved) item(key = "lanes") {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = Spacing.Side, vertical = 12.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = Spacing.Side, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)
                     ) {
                         // Counted in the background (scanning 24k channels here froze Home after launch).
@@ -205,26 +273,55 @@ fun HomeScreen(state: AppState) {
                     }
                 }
 
-                if (recentChannels.isNotEmpty()) {
-                    item(key = "recent") {
-                        HomeRow(title = "Reprendre", subtitle = "Vos dernières chaînes") {
-                            recentChannels.take(ROW_LIMIT).forEach { channel ->
-                                key(channel.id) {
-                                ChannelCard(channel, isFavorite = channel.id in state.favorites, width = cardWidth, modifier = Modifier.homeFocus("recent:${channel.id}"), programmeSummary = programmeTitle(channel),
-                                    onLongClick = {
-                                        state.confirmPressGuard.consumeCurrentPress()
-                                        state.toggleFavorite(channel)
-                                    }) { state.play(channel, recentChannels) }
+                if (saved) item(key = "saved-actions") {
+                    Row(Modifier.padding(horizontal = Spacing.Side, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
+                        TvButton("Mes chaînes favorites", { state.navigate(Page.Browse(BrowseLane.FAVORITES)) }, Modifier.homeFocus("saved:live"), icon = Icons.Rounded.StarOutline)
+                        TvButton("Parcourir les catégories", { state.navigate(Page.CategoryPicker()) }, icon = Icons.Rounded.GridView)
+                    }
+                }
+
+                if (savedTitles.isNotEmpty() && saved) {
+                    LibraryKind.entries.forEach { kind ->
+                        val titles = savedTitles.filter { it.kind == kind }
+                        if (titles.isNotEmpty()) item(key = "saved:${kind.name}") {
+                            HomeRow(if (kind == LibraryKind.MOVIES) "Films enregistrés" else "Séries enregistrées", "OK long pour retirer") {
+                                titles.forEach { title ->
+                                    key(title.key) {
+                                        Column(Modifier.width(cardWidth)) {
+                                            VodPoster(title.item, null, Modifier.homeFocus("title:${title.key}"), onLongClick = {
+                                                state.confirmPressGuard.consumeCurrentPress()
+                                                removalFocusKey = homeFocusAfterRemoval(titles.map { "title:${it.key}" }, "title:${title.key}", "saved:live")
+                                                state.account?.let { state.watchHistory.toggleSaved(it, title.item, kind) }
+                                            }) {
+                                                state.navigate(if (kind == LibraryKind.MOVIES) Page.MovieDetails(title.item) else Page.Episodes(title.item))
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            // Récents has no drawer item: its full list (with "Retirer") opens from here.
-                            SeeAllCard(Modifier.homeFocus("recent:all")) { state.navigate(Page.Browse(BrowseLane.RECENT)) }
+                        }
+                    }
+                } else if (saved) item(key = "saved-titles-empty") {
+                    Column(Modifier.padding(horizontal = Spacing.Side, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Gardez vos prochaines envies ici", style = Type.Title, color = Palette.OnSurface)
+                        Text("Sur la fiche d’un film ou d’une série, choisissez « Ajouter à ma liste ».", style = Type.Body, color = Palette.Muted)
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
+                            TvButton("Parcourir les films", { state.openDestination(NavDest.MOVIES) })
+                            TvButton("Parcourir les séries", { state.openDestination(NavDest.SERIES) })
                         }
                     }
                 }
 
+                if (saved && resume.isNotEmpty()) resumeRows()
+                else if (saved) item(key = "saved-empty") {
+                    Column(Modifier.padding(horizontal = Spacing.Side, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Films et séries à reprendre", style = Type.Title, color = Palette.OnSurface)
+                        Text("Vos films et épisodes commencés apparaîtront ici.", style = Type.Body, color = Palette.Muted)
+                    }
+                }
+
                 item(key = "favorites") {
-                    HomeRow(title = "Mes favoris", subtitle = if (favoriteChannels.isEmpty()) null else "Appui long sur OK pour retirer") {
+                    HomeRow(title = "Vos chaînes favorites", subtitle = if (favoriteChannels.isEmpty()) null else "En un clic") {
                         if (favoriteChannels.isEmpty()) {
                             HintCard(Icons.Rounded.StarOutline, "Aucun favori pour l’instant", "Sur une chaîne, faites un appui long sur OK pour l’ajouter ici.")
                         } else {
@@ -234,7 +331,7 @@ fun HomeScreen(state: AppState) {
                                     onLongClick = {
                                         state.confirmPressGuard.consumeCurrentPress()
                                         removalFocusKey = homeFocusAfterRemoval(
-                                            favoriteChannels.map { "fav:${it.id}" }, "fav:${channel.id}", FIRST_TILE, ROW_LIMIT
+                                            favoriteChannels.map { "fav:${it.id}" }, "fav:${channel.id}", if (saved) "saved:live" else FIRST_TILE, ROW_LIMIT
                                         )
                                         state.toggleFavorite(channel)
                                     }) { state.play(channel, favoriteChannels) }
@@ -244,6 +341,8 @@ fun HomeScreen(state: AppState) {
                         }
                     }
                 }
+
+                if (!saved) resumeRows()
 
                 item(key = "pinned") {
                     HomeRow(title = "Catégories épinglées", subtitle = if (pinned.isEmpty()) null else "Appui long sur OK pour retirer") {
@@ -266,28 +365,16 @@ fun HomeScreen(state: AppState) {
                     }
                 }
 
-            }
-            }
-            val focusedKey = state.homeFocusKey.orEmpty()
-            val focusedChannel = if (focusedKey.startsWith("recent:") || focusedKey.startsWith("fav:")) {
-                state.channelsById[focusedKey.substringAfter(':')]
-            } else null
-            val focusedCategory = if (focusedKey.startsWith("cat:")) {
-                state.categoriesById[focusedKey.substringAfter(':')]
-            } else null
-            val focusedProgramme = focusedChannel?.let { programmeTitle(it) }.orEmpty()
-            Column(Modifier.fillMaxWidth().padding(start = Spacing.Side, end = Spacing.Side, top = 10.dp, bottom = Spacing.Top)) {
-                Text(
-                    listOfNotNull(focusedChannel?.displayName ?: focusedCategory?.displayName, focusedProgramme.takeIf { it.isNotBlank() }).joinToString(" · "),
-                    style = Type.Caption, color = Palette.OnSurface, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis
-                )
-                when {
-                    focusedChannel != null -> HintBar(
-                        "OK" to "Regarder", "OK long" to if (focusedChannel.id in state.favorites) "Retirer favori" else "Ajouter favori", "◀" to "Menu"
-                    )
-                    focusedCategory != null -> HintBar("OK" to "Ouvrir", "OK long" to "Désépingler", "◀" to "Menu")
-                    else -> HintBar("OK" to if (focusedKey == "cat:add") "Épingler" else "Ouvrir", "◀" to "Menu")
+                recentRows(cardWidth)
+
+                item(key = "utilities") {
+                    Row(Modifier.padding(horizontal = Spacing.Side, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(Spacing.Gutter)) {
+                        TvButton("Guide TV", { state.openDestination(NavDest.GUIDE) }, icon = Icons.Rounded.Schedule)
+                        TvButton("Toutes les catégories", { state.openDestination(NavDest.CATEGORIES) }, icon = Icons.Rounded.GridView)
+                    }
                 }
+
+            }
             }
         }
     }
@@ -332,29 +419,12 @@ private fun HomeRow(
 
 @Composable
 private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClick: () -> Unit) {
-    CardSurface(onClick = onClick, modifier = modifier.heightIn(min = 88.dp), container = style.colors.last()) {
-        Box(Modifier.fillMaxSize().background(Brush.linearGradient(style.colors))) {
-            Text(
-                style.emoji, fontSize = 72.sp,
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 16.dp, y = 18.dp).rotate(-12f).alpha(0.28f)
-                    .clearAndSetSemantics { } // decorative: screen readers announce the emoji once
-            )
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                // With a larger system text size the title needs the room; the big faded emoji stays as the cue.
-                val roomy = LocalDensity.current.fontScale <= 1.15f
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (roomy && style.lane != BrowseLane.EVENTS) Text(style.emoji, fontSize = 20.sp)
-                    Text(style.lane.label, style = Type.Title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                Text(style.subtitle, style = Type.Caption, color = Color.White.copy(alpha = 0.82f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(count, style = Type.Label, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    Icon(Icons.Rounded.ArrowForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                }
+    FocusSurface(onClick = onClick, modifier = modifier.heightIn(min = 56.dp), focusedScale = 1.02f) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(style.icon, null, Modifier.size(24.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(style.lane.label, style = Type.Label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(count, style = Type.Caption, color = secondaryColor(), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -363,7 +433,6 @@ private fun LaneCard(style: LaneStyle, count: String, modifier: Modifier, onClic
 
 @Composable
 fun ChannelCard(channel: Channel, isFavorite: Boolean, modifier: Modifier, width: Dp, programmeSummary: String = "", onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
-    // Five columns share the width remaining after the drawer and safe margins.
     // Height follows the text, so nothing is cut off with a larger system text size.
     CardSurface(onClick = onClick, onLongClick = onLongClick, modifier = modifier.width(width).heightIn(min = 108.dp).fillMaxHeight()) {
         Column(Modifier.fillMaxWidth()) {
