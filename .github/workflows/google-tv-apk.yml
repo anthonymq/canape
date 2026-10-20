@@ -84,6 +84,10 @@ jobs:
           ./gradlew --no-daemon assembleRelease
           mkdir -p apk
           cp app/build/outputs/apk/release/app-release.apk apk/canape-google-tv.apk
+      - name: Generate update manifest from signed APK
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/update-manifest.sh apk/canape-google-tv.apk "$RELEASE_TAG" apk/update.json
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,8 +96,9 @@ jobs:
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" apk/canape-google-tv.apk --clobber
+            gh release upload "$RELEASE_TAG" apk/update.json --clobber
           else
-            gh release create "$RELEASE_TAG" apk/canape-google-tv.apk \
+            gh release create "$RELEASE_TAG" apk/canape-google-tv.apk apk/update.json \
               --verify-tag --title "Canapé $RELEASE_TAG" --latest \
               --notes "Canapé for Google TV / Android TV (Android 6.0 or newer). Open Downloader and enter https://github.com/anthonymq/canape/releases/latest/download/canape-google-tv.apk to install. Signed with the persistent Canapé distribution key. Previous debug builds must be uninstalled first."
           fi
