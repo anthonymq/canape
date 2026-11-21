@@ -17,6 +17,14 @@ android {
 
     buildFeatures { compose = true }
 
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
+
     val releaseKeystore = System.getenv("CANAPE_KEYSTORE_PATH")
     if (releaseKeystore != null) {
         signingConfigs {
