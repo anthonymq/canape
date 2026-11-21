@@ -294,7 +294,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
             if (cached != null) {
                 applyCatalog(cached.catalog, cached.savedAt)
                 resetTo(Page.Home)
-                refresh(silent = true)
+                if (!catalogIsFresh(cached.savedAt, System.currentTimeMillis())) refresh(silent = true)
             } else {
                 loadFromNetwork(current)
             }

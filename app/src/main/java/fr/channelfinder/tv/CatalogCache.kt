@@ -12,6 +12,10 @@ import java.security.MessageDigest
 private const val TAG = "CatalogCache"
 private const val MAGIC = 0x43465443 // "CFTC"
 private const val VERSION = 4 // bump when lane rules change: lanes are stored
+private const val FRESH_FOR_MS = 6 * 60 * 60 * 1000L
+
+/** A catalog saved this recently opens without a background download; the viewer can still refresh it in Réglages. */
+internal fun catalogIsFresh(savedAt: Long, now: Long): Boolean = now - savedAt in 0 until FRESH_FOR_MS
 
 /**
  * Last successful catalog on internal storage, so Home opens instantly and refreshes in the background.
