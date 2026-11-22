@@ -33,7 +33,7 @@ class XtreamCatalogParseTest {
     }
 
     @Test fun categoriesNeedAnIdAndFallBackToAutres() {
-        val rows = parseLiveCategories(StringReader(
+        val rows = parseCategories(StringReader(
             """[{"category_id":"1","category_name":" FR | SPORTS "},{"category_id":2,"category_name":null},{"category_id":"","category_name":"Vide"}]"""
         ))
         assertEquals(listOf(ChannelCategory("1", "FR | SPORTS"), ChannelCategory("2", "Autres")), rows)

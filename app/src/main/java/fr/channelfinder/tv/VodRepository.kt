@@ -2,8 +2,8 @@ package fr.channelfinder.tv
 
 import android.net.Uri
 import android.os.CancellationSignal
-import org.json.JSONArray
 import org.json.JSONObject
+import java.io.Reader
 
 enum class LibraryKind(val title: String, val path: String) {
     MOVIES("Films", "movie"), SERIES("Séries", "series")
@@ -52,21 +52,27 @@ internal fun libraryPresentation(rawTitle: String, metadataYear: String): Librar
 
 data class LibraryCatalog(val categories: List<ChannelCategory>, val items: List<LibraryItem>)
 
-internal fun parseLibraryItems(json: JSONArray, kind: LibraryKind): List<LibraryItem> = buildList {
-    for (index in 0 until json.length()) {
-        val item = json.optJSONObject(index) ?: continue
-        val id = item.optString(if (kind == LibraryKind.MOVIES) "stream_id" else "series_id")
-        val title = item.optString("name").trim()
-        if (id.isBlank() || id == "null" || title.isBlank() || title == "null") continue
-        add(LibraryItem(id, title, item.optString("category_id"),
-            item.optString(if (kind == LibraryKind.MOVIES) "stream_icon" else "cover"),
-            item.optString("container_extension").takeIf { it.matches(Regex("[a-zA-Z0-9]+")) } ?: "mp4",
-            overview = item.optString("plot").takeUnless { it == "null" }.orEmpty(),
-            year = item.optString("year").takeUnless { it == "null" }.orEmpty(),
-            rating = item.optString("rating").takeUnless { it == "null" || it == "0" }.orEmpty(),
-            backdrop = item.optJSONArray("backdrop_path")?.optString(0).orEmpty()))
-    }
-}.distinctBy { it.id }
+private val containerExtension = Regex("[a-zA-Z0-9]+")
+
+/** Movie or series rows, read while the provider's list downloads (it is never held whole in memory). */
+internal fun parseLibraryItems(source: Reader, kind: LibraryKind): List<LibraryItem> {
+    val idField = if (kind == LibraryKind.MOVIES) "stream_id" else "series_id"
+    val artworkField = if (kind == LibraryKind.MOVIES) "stream_icon" else "cover"
+    val fields = setOf(idField, "name", "category_id", artworkField, "container_extension", "plot", "year", "rating", "backdrop_path")
+    return buildList {
+        readProviderRows(source, fields, UNREADABLE) { row ->
+            val id = row[idField].orEmpty()
+            val title = row["name"].orEmpty().trim()
+            if (id.isBlank() || id == "null" || title.isBlank() || title == "null") return@readProviderRows
+            add(LibraryItem(id, title, row["category_id"].orEmpty(), row[artworkField].orEmpty(),
+                row["container_extension"]?.takeIf { it.matches(containerExtension) } ?: "mp4",
+                overview = row["plot"].orEmpty().takeUnless { it == "null" }.orEmpty(),
+                year = row["year"].orEmpty().takeUnless { it == "null" }.orEmpty(),
+                rating = row["rating"].orEmpty().takeUnless { it == "null" || it == "0" }.orEmpty(),
+                backdrop = row["backdrop_path"].orEmpty()))
+        }
+    }.distinctBy { it.id }
+}
 
 internal fun parseEpisodes(json: JSONObject): List<LibraryItem> {
     val seasons = json.optJSONObject("episodes")
@@ -82,7 +88,7 @@ internal fun parseEpisodes(json: JSONObject): List<LibraryItem> {
                 val number = entry.optInt("episode_num", index + 1)
                 add(LibraryItem(id, entry.optString("title").takeUnless { it.isBlank() || it == "null" }
                     ?: "Épisode $number", extension = entry.optString("container_extension")
-                    .takeIf { it.matches(Regex("[a-zA-Z0-9]+")) } ?: "mp4",
+                    .takeIf { it.matches(containerExtension) } ?: "mp4",
                     season = entry.optInt("season", season), episode = number))
             }
         }
@@ -92,16 +98,9 @@ internal fun parseEpisodes(json: JSONObject): List<LibraryItem> {
 class VodRepository(private val api: XtreamRepository) {
     fun load(account: XcAccount, kind: LibraryKind, cancellation: CancellationSignal): LibraryCatalog = api.translateErrors {
         val prefix = if (kind == LibraryKind.MOVIES) "vod" else "series"
-        val categories = JSONArray(api.request(account, "get_${prefix}_categories", cancellation = cancellation))
-        val rows = buildList {
-            for (index in 0 until categories.length()) {
-                val row = categories.optJSONObject(index) ?: continue
-                val id = row.optString("category_id")
-                if (id.isNotBlank()) add(ChannelCategory(id, row.optString("category_name", "Autres")))
-            }
-        }
+        val categories = api.exchange(account, "get_${prefix}_categories", cancellation = cancellation) { parseCategories(it, UNREADABLE) }
         val action = if (kind == LibraryKind.MOVIES) "get_vod_streams" else "get_series"
-        LibraryCatalog(rows, parseLibraryItems(JSONArray(api.request(account, action, cancellation = cancellation)), kind))
+        LibraryCatalog(categories, api.exchange(account, action, cancellation = cancellation) { parseLibraryItems(it, kind) })
     }
 
     fun episodes(account: XcAccount, id: String, cancellation: CancellationSignal): List<LibraryItem> = api.translateErrors {

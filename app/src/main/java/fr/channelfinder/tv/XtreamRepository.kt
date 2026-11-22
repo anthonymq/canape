@@ -36,7 +36,7 @@ internal const val UNREADABLE = "Réponse illisible du fournisseur. Vérifiez qu
 class XtreamRepository {
     fun loadCatalog(account: XcAccount, onStep: (LoadStep) -> Unit = {}): XtreamCatalog = translateErrors {
         onStep(LoadStep.CONNECTING)
-        val categories = exchange(account, "get_live_categories", onConnected = { onStep(LoadStep.CATEGORIES) }, read = ::parseLiveCategories)
+        val categories = exchange(account, "get_live_categories", onConnected = { onStep(LoadStep.CATEGORIES) }) { parseCategories(it) }
         val categoryNames = categories.associate { it.id to it.name }
         val channels = exchange(account, "get_live_streams", onConnected = { onStep(LoadStep.CHANNELS) }) { parseLiveStreams(it, categoryNames) }
         onStep(LoadStep.PREPARING)
@@ -69,7 +69,7 @@ class XtreamRepository {
         }
 
     /** Sends one API request and hands the successful reply to [read] as it arrives. */
-    private fun <T> exchange(account: XcAccount, action: String, extra: String = "", guide: Boolean = false,
+    internal fun <T> exchange(account: XcAccount, action: String, extra: String = "", guide: Boolean = false,
                              cancellation: CancellationSignal? = null, onConnected: () -> Unit = {}, read: (Reader) -> T): T {
         val query = "username=${enc(account.username)}&password=${enc(account.password)}&action=${enc(action)}$extra"
         val connection = URL("${account.serverUrl.trimEnd('/')}/player_api.php?$query").openConnection() as HttpURLConnection
@@ -118,8 +118,8 @@ class XtreamRepository {
     private fun enc(value: String) = URLEncoder.encode(value, Charsets.UTF_8.name())
 }
 
-internal fun parseLiveCategories(source: Reader): List<ChannelCategory> = buildList {
-    readProviderRows(source, setOf("category_id", "category_name")) { row ->
+internal fun parseCategories(source: Reader, whenEmpty: String = ACCOUNT_REFUSED): List<ChannelCategory> = buildList {
+    readProviderRows(source, setOf("category_id", "category_name"), whenEmpty) { row ->
         val id = row["category_id"].orEmpty()
         if (id.isNotBlank()) add(ChannelCategory(id = id, name = row["category_name"]?.trim() ?: "Autres"))
     }
@@ -146,12 +146,12 @@ internal fun parseLiveStreams(source: Reader, categoryNames: Map<String, String>
 
 /**
  * Reads a provider list one object at a time, keeping only [fields] as text. A 24k-channel reply is never
- * held whole in memory. An object instead of a list is the provider's account answer.
+ * held whole in memory. An object instead of a list is the provider's account answer; [whenEmpty] explains an empty reply.
  */
-private fun readProviderRows(source: Reader, fields: Set<String>, onRow: (Map<String, String>) -> Unit) {
+internal fun readProviderRows(source: Reader, fields: Set<String>, whenEmpty: String = ACCOUNT_REFUSED, onRow: (Map<String, String>) -> Unit) {
     val reader = JsonReader(source).apply { strictness = Strictness.LENIENT }
     try {
-        val first = try { reader.peek() } catch (_: EOFException) { throw CatalogException(ACCOUNT_REFUSED) }
+        val first = try { reader.peek() } catch (_: EOFException) { throw CatalogException(whenEmpty) }
         when (first) {
             JsonToken.BEGIN_ARRAY -> Unit
             JsonToken.BEGIN_OBJECT -> throw CatalogException(if (authRefused(reader)) ACCOUNT_REFUSED else NOT_A_LIST)
@@ -191,10 +191,17 @@ private fun authRefused(reader: JsonReader): Boolean {
     return refused
 }
 
-/** A scalar as text (numbers keep their provider spelling); null and nested values are absent. */
+/** A scalar as text (numbers keep their provider spelling), or a list's first scalar; null and objects are absent. */
 private fun readText(reader: JsonReader): String? = when (reader.peek()) {
     JsonToken.STRING, JsonToken.NUMBER -> reader.nextString()
     JsonToken.BOOLEAN -> reader.nextBoolean().toString()
     JsonToken.NULL -> { reader.nextNull(); null }
+    JsonToken.BEGIN_ARRAY -> {
+        reader.beginArray()
+        val first = if (reader.hasNext()) readText(reader) else null
+        while (reader.hasNext()) reader.skipValue()
+        reader.endArray()
+        first
+    }
     else -> { reader.skipValue(); null }
 }
