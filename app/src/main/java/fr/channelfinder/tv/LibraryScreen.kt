@@ -26,7 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Text
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
@@ -74,6 +76,17 @@ class LibrarySession(val account: XcAccount?) {
     val list = LazyListState()
     var grid by mutableStateOf(LazyGridState())
         private set
+    private var restoring: Job? = null
+
+    /** Reads the saved catalog from disk once; Home starts it so opening the library does not wait, and the screen joins it. */
+    internal fun restoreSaved(scope: CoroutineScope, cache: LibraryCache, kind: LibraryKind): Job = restoring ?: scope.launch {
+        val owner = account ?: return@launch
+        val saved = withContext(Dispatchers.IO) { cache.load(owner, "catalog:${kind.name}") } ?: return@launch
+        if (catalog == null) {
+            catalog = saved.catalog
+            catalogSavedAt = saved.savedAt
+        }
+    }.also { restoring = it }
 
     fun selectSort(value: LibrarySort) {
         if (sort == value) return
@@ -101,9 +114,7 @@ class LibrarySession(val account: XcAccount?) {
 
 @Composable
 fun LibraryScreen(state: AppState, page: Page.Library) {
-    val session = state.librarySessions.getOrPut(page.kind) { LibrarySession(state.account) }.let {
-        if (it.account == state.account) it else LibrarySession(state.account).also { fresh -> state.librarySessions[page.kind] = fresh }
-    }
+    val session = state.librarySession(page.kind)
     var retry by remember { mutableIntStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
     var categoryOpen by remember { mutableStateOf(false) }
@@ -117,13 +128,7 @@ fun LibraryScreen(state: AppState, page: Page.Library) {
         val account = state.account ?: return@LaunchedEffect
         try {
             val key = "catalog:${page.kind.name}"
-            if (session.catalog == null) {
-                val cached = withContext(Dispatchers.IO) { state.libraryCache.load(account, key) }
-                if (cached != null) {
-                    session.catalog = cached.catalog
-                    session.catalogSavedAt = cached.savedAt
-                }
-            }
+            if (session.catalog == null) state.restoreLibrary(page.kind).join()
             if (retry == 0 && session.catalog?.let { LibraryCache.Entry(it, session.catalogSavedAt).isFresh() } == true) return@LaunchedEffect
             val fresh = withContext(Dispatchers.IO) { state.vodRepository.load(account, page.kind, cancellation) }
             if (fresh.items.isEmpty() && session.catalog?.items?.isNotEmpty() == true) return@LaunchedEffect

@@ -41,7 +41,7 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     internal val libraryCache = LibraryCache(java.io.File(context.filesDir, "library_cache"))
     val vodRepository = VodRepository(repository)
     val watchHistory = VodWatchStore(context)
-    val librarySessions = mutableMapOf<LibraryKind, LibrarySession>()
+    private val librarySessions = mutableMapOf<LibraryKind, LibrarySession>()
     val episodeSessions = mutableMapOf<String, LibrarySession>()
     val homeResumeSessions = mutableMapOf<String, LibrarySession>()
     val guideRepository = GuideRepository(repository)
@@ -285,6 +285,14 @@ class AppState(context: Context, private val scope: CoroutineScope) {
     // endregion
 
     // region Catalog
+    fun librarySession(kind: LibraryKind): LibrarySession =
+        librarySessions[kind]?.takeIf { it.account == account } ?: LibrarySession(account).also { librarySessions[kind] = it }
+
+    fun restoreLibrary(kind: LibraryKind): Job = librarySession(kind).restoreSaved(scope, libraryCache, kind)
+
+    /** Films and Séries read their saved lists while Home is shown; nothing is downloaded until a library opens. */
+    fun restoreLibraries() = LibraryKind.entries.forEach { restoreLibrary(it) }
+
     fun start() {
         val current = account ?: return
         scope.launch {

@@ -1,9 +1,32 @@
 package fr.channelfinder.tv
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class LibrarySessionTest {
+    @get:Rule val folder = TemporaryFolder()
+
+    @Test fun savedCatalogIsReadOnceAndNeverReplacesALoadedOne() = runBlocking {
+        val account = XcAccount("https://cache-fixture.invalid", "fixture-viewer", "fixture-secret")
+        val cache = LibraryCache(folder.newFolder())
+        val saved = LibraryCatalog(emptyList(), listOf(LibraryItem("saved", "Saved")))
+        assertTrue(cache.save(account, "catalog:MOVIES", saved, 1234))
+
+        val session = LibrarySession(account)
+        val preload = session.restoreSaved(this, cache, LibraryKind.MOVIES)
+        assertSame(preload, session.restoreSaved(this, cache, LibraryKind.MOVIES))
+        preload.join()
+        assertEquals(saved, session.catalog)
+        assertEquals(1234L, session.catalogSavedAt)
+
+        val loaded = LibrarySession(account).apply { catalog = LibraryCatalog(emptyList(), listOf(LibraryItem("fresh", "Fresh"))) }
+        loaded.restoreSaved(this, cache, LibraryKind.MOVIES).join()
+        assertEquals("fresh", loaded.catalog?.items?.single()?.id)
+    }
+
     @Test fun categoryChangesClearStaleSelectionAndSearchWithoutDiscardingCatalog() {
         val session = LibrarySession(null)
         val title = LibraryItem("title", "Title", categoryId = "first")

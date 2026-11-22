@@ -105,6 +105,7 @@ fun HomeScreen(state: AppState, saved: Boolean = false) {
     val summaryRequests = remember { Semaphore(2) }
     var programmeNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { delay(30_000); programmeNow = System.currentTimeMillis() } }
+    LaunchedEffect(state.account) { state.restoreLibraries() }
     @Composable
     fun programmeTitle(channel: Channel): String = state.account?.let { account ->
         currentProgrammeSummary(account, channel.id, state.guideRepository, summaryRequests, programmeNow, showStatus = false)
